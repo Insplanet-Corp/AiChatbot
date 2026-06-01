@@ -7,8 +7,10 @@ import { ContentInner, FixedTop, Main, ScrollBody } from "../components/layouts"
 import Text from "../components/common/text/Text";
 import Spacer from "../components/Spacer";
 import { mapRowToCardData } from "../services/candidateService";
+import { JOB_CATEGORIES } from "../constants/service";
 
 const ALL_CATEGORY = "전체";
+const CATEGORY_TABS = [ALL_CATEGORY, ...JOB_CATEGORIES];
 
 const CandidatesPage = () => {
   const navigate = useNavigate();
@@ -19,11 +21,6 @@ const CandidatesPage = () => {
   const [selectedCategory, setSelectedCategory] = useState(ALL_CATEGORY);
   const [financeOnly, setFinanceOnly] = useState(false);
   const [itCertOnly, setItCertOnly] = useState(false);
-
-  const categories = useMemo(() => {
-    const set = new Set(candidates.map((c) => c.basic_info.category));
-    return [ALL_CATEGORY, ...Array.from(set).filter(Boolean).sort()];
-  }, [candidates]);
 
   const filtered = useMemo(() => {
     return candidates.filter((c) => {
@@ -49,7 +46,7 @@ const CandidatesPage = () => {
 
           <FilterBar>
             <CategoryTabs>
-              {categories.map((cat) => (
+              {CATEGORY_TABS.map((cat) => (
                 <CategoryTab
                   key={cat}
                   $active={selectedCategory === cat}
