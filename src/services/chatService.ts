@@ -1,12 +1,11 @@
 import { supabase } from "../utils/supabase";
-import { decryptJSON } from "../utils/encrypt";
 import { askOllama, getEmbedding } from "../apis/ollama";
-import { formatExperience } from "../utils/formatters";
 import {
   CHAT_TYPE_MESSAGES,
   CHAT_WITH_SUPABASE_MESSAGES,
 } from "../constants/chatPrompt";
 import { askGemini } from "../apis/gemini";
+import { mapRowToCardData } from "./candidateService";
 
 export interface PostChatParams {
   id: string;
@@ -82,83 +81,11 @@ const postChatWithSupabase = async ({
     console.log("matchedCandidates : ", matchedCandidates);
 
     const minimalCandidates = matchedCandidates.map((c: any) => {
-      let decryptedResumeData: any = {};
-      try {
-        if (typeof c.resume_data === "string") {
-          decryptedResumeData = decryptJSON<any>(c.resume_data);
-          console.log("string decryptedResumeData : ", decryptedResumeData);
-        } else {
-          decryptedResumeData = c.resume_data || {};
-        }
-      } catch (err) {
-        decryptedResumeData = c.resume_data || {};
-      }
-
-      const rd = decryptedResumeData || {};
-
-      const {
-        personal_info = {},
-        professional_summary = {},
-        evaluation = {},
-        educations = [],
-        certifications = [],
-        skills = [],
-        work_experiences = [],
-        projects = [],
-      } = rd;
-
-      const birthYearStr = rd?.personal_info?.birth_date?.substring(0, 4);
-      const birthYear = birthYearStr ? parseInt(birthYearStr, 10) : null;
-
-      let finalEdu = "학력 정보 없음";
-      if (Array.isArray(educations) && educations.length > 0) {
-        const edu = educations[0];
-        finalEdu =
-          `${edu.school_name || ""} ${edu.major || ""} ${edu.graduation_status || ""}`.trim();
-      }
-      const qualifications = Array.isArray(certifications)
-        ? certifications.map((cert: any) => cert.certification_name)
-        : [];
-
-      const skillsArr = Array.isArray(skills)
-        ? skills.map((s: any) => s.skill_name)
-        : [];
-
-      const profileImage =
-        personal_info.profile_image_url ||
-        "https://cdn-icons-png.flaticon.com/256/1077/1077114.png";
-      const category =
-        c.job_category || professional_summary.job_category || "미분류";
-      const experienceTotal = formatExperience(
-        c.total_experience_months ||
-          professional_summary.total_experience_months,
-      );
-      const internalRating = c.rating || 0;
-      const introduction =
-        evaluation.one_line_review ||
-        professional_summary.introduction ||
-        "소개글이 없습니다.";
-
+      const card = mapRowToCardData(c);
       return {
-        id: c.id,
-        name: c.name,
-        profile_image: profileImage,
-        is_kosa_verified: false,
-        basic_info: {
-          category: category,
-          experience_total: experienceTotal,
-          birth_year: birthYear,
-        },
-        details: {
-          final_education: finalEdu,
-          qualifications: qualifications,
-          major_experience: "",
-          skills: skillsArr,
-          internal_rating: internalRating,
-        },
-        introduction: introduction,
-        work_experiences: work_experiences,
-        projects: projects,
+        ...card,
+        work_experiences: c.work_experiences || [],
+        projects: c.projects || [],
       };
     });
 
@@ -197,27 +124,27 @@ const postChatWithSupabase = async ({
         let parsedData = JSON.parse(resultText);
         parsedData = Array.isArray(parsedData) ? parsedData[0] : parsedData;
 
+        const { work_experiences: _we, projects: _p, ...cardData } = candidate;
         evaluatedCandidates.push({
-          ...candidate,
+          ...cardData,
           details: {
-            ...candidate.details,
+            ...cardData.details,
             major_experience: parsedData.major_experience || "관련 경험 없음",
-            skills: parsedData.skills || candidate.details.skills,
+            skills: parsedData.skills || cardData.details.skills,
           },
           reason: parsedData.reason || "조건에 부합하는 인재입니다.",
-          work_experiences: undefined,
-          projects: undefined,
         });
 
         console.log(evaluatedCandidates);
       } catch (err) {
         console.error(`[${candidate.name}] 평가 중 AI 파싱 오류 발생 :`, err);
 
+        const { work_experiences: _we2, projects: _p2, ...cardDataErr } = candidate;
         evaluatedCandidates.push({
-          ...candidate,
+          ...cardDataErr,
           reason: "AI 분석 중 오류가 발생하여 사유를 생성하지 못했습니다.",
           details: {
-            ...candidate.details,
+            ...cardDataErr.details,
             major_experience: "확인 불가",
           },
         });

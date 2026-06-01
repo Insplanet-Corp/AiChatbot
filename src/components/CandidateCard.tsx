@@ -108,7 +108,7 @@ const CandidateCard = ({ data, onClick }) => {
 };
 
 const Card = styled.div`
-  width: calc(50% - 3.5rem);
+  width: 100%;
   background-color: var(--color-bg-primary, #ffffff);
   border: 1px solid var(--color-border-muted, #e6e8ea);
   border-radius: var(--radius-xl, 16px);
@@ -184,7 +184,12 @@ const DetailList = styled.div`
 const DetailRow = styled.div`
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: 12px;
+
+  & > :first-child {
+    flex-shrink: 0;
+    width: 52px;
+  }
 `;
 
 const Value = styled.span`

@@ -1,6 +1,109 @@
 import { supabase } from "../utils/supabase";
 import { decryptJSON } from "../utils/encrypt";
 import { SERVICE_NAME } from "../constants/service";
+import { formatExperience } from "../utils/formatters";
+
+// -------------------------------------------------------
+// Shared card data shape used by CandidateCard component
+// -------------------------------------------------------
+export interface CandidateCardData {
+  id: string;
+  name: string;
+  profile_image: string | null;
+  introduction: string;
+  is_kosa_verified: boolean;
+  basic_info: {
+    category: string;
+    experience_total: string;
+    birth_year: number | null;
+  };
+  details: {
+    final_education: string;
+    qualifications: string[];
+    major_experience: string;
+    skills: string[];
+    internal_rating: number;
+  };
+}
+
+const safeDecryptName = (raw: string, fallback: string): string => {
+  try {
+    const result = decryptJSON<string>(raw);
+    return typeof result === "string" ? result : fallback;
+  } catch {
+    return fallback;
+  }
+};
+
+const safeDecryptResumeData = (raw: any): any => {
+  try {
+    if (typeof raw === "string") return decryptJSON(raw);
+    if (raw?.encrypted) return decryptJSON(raw);
+    return raw || {};
+  } catch {
+    return raw || {};
+  }
+};
+
+export const mapRowToCardData = (row: any): CandidateCardData => {
+  const rd = safeDecryptResumeData(row.resume_data);
+  const name = safeDecryptName(row.name, rd?.personal_info?.name || "이름 없음");
+
+  const expLabel = formatExperience(row.total_experience_months);
+
+  const birthYear = rd?.personal_info?.birth_date
+    ? parseInt(rd.personal_info.birth_date.substring(0, 4))
+    : null;
+
+  const latestJob = Array.isArray(rd?.work_experiences) && rd.work_experiences[0];
+  const category =
+    row.job_category ||
+    latestJob?.job_title ||
+    rd?.personal_info?.desired_position ||
+    "직군 미상";
+
+  const skills: string[] = Array.isArray(rd?.skills)
+    ? rd.skills.map((s: any) => s.skill_name || s).filter(Boolean)
+    : [];
+
+  const qualifications: string[] = Array.isArray(rd?.certifications)
+    ? rd.certifications.map((c: any) => c.certification_name || c).filter(Boolean)
+    : [];
+
+  const finalEducation =
+    Array.isArray(rd?.education) && rd.education[0]
+      ? `${rd.education[0].school_name || ""} ${rd.education[0].major || ""}`.trim()
+      : Array.isArray(rd?.educations) && rd.educations[0]
+        ? `${rd.educations[0].school_name || ""} ${rd.educations[0].major || ""}`.trim()
+        : "-";
+
+  const majorExperience = latestJob
+    ? `${latestJob.company_name || ""} / ${latestJob.job_title || ""}`.trim()
+    : "-";
+
+  const introduction =
+    rd?.evaluation?.one_line_review || rd?.professional_summary?.introduction || "";
+
+  return {
+    id: row.id,
+    name,
+    profile_image: rd?.personal_info?.profile_image_url || null,
+    introduction,
+    is_kosa_verified: false,
+    basic_info: {
+      category,
+      experience_total: expLabel,
+      birth_year: birthYear,
+    },
+    details: {
+      final_education: finalEducation,
+      qualifications,
+      major_experience: majorExperience,
+      skills,
+      internal_rating: row.rating || 0,
+    },
+  };
+};
 
 const fetchAndDecryptCandidate = async (id: string) => {
   const { data, error } = await supabase

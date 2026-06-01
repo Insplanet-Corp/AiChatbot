@@ -111,7 +111,7 @@ const AIContent = styled.div`
 `;
 
 const BaseBubble = styled.div`
-  max-width: 508px;
+  max-width: min(508px, 85%);
   min-height: 40px;
   padding: var(--space-12, 12px) var(--space-16, 16px);
   box-sizing: border-box;

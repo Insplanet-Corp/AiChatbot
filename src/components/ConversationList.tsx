@@ -21,10 +21,10 @@ function RoomsSkeleton() {
     <div className="conversationList">
       <div className="loader">
         <SyncLoader
-          color={"#ffffff"}
+          color={"var(--color-text-muted, #9b9fa6)"}
           loading={true}
           cssOverride={override}
-          size={20}
+          size={8}
           aria-label="Loading Spinner"
           data-testid="loader"
           speedMultiplier={1}
