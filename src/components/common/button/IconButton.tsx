@@ -28,7 +28,7 @@ const IconButton = ({
 }: BaseProps) => {
   return (
     <StyledIconButton
-      styled={style}
+      $styled={style}
       size={size}
       data-state={state}
       onClick={onClick}
@@ -95,7 +95,7 @@ const STYLED_MAP: Record<ButtonStyle, any> = {
 };
 
 const StyledIconButton = styled.button<{
-  styled: ButtonStyle;
+  $styled: ButtonStyle;
   size: ButtonSize;
 }>`
   display: inline-flex;
@@ -119,7 +119,7 @@ const StyledIconButton = styled.button<{
   }
 
   ${({ size }) => SIZE_MAP[size]}
-  ${({ styled }) => STYLED_MAP[styled]}
+  ${({ $styled }) => STYLED_MAP[$styled]}
 
   &::after {
     content: "";

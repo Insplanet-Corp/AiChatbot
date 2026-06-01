@@ -8,12 +8,12 @@ export const scrollbarStyle = css`
   }
 
   &::-webkit-scrollbar-thumb {
-    background-color: rgba(0, 0, 0, 0.1);
-    border-radius: 10px;
+    background-color: var(--color-border-tertiary, #dde0e3);
+    border-radius: var(--radius-full, 999px);
   }
 
   &:hover::-webkit-scrollbar-thumb {
-    background-color: rgba(0, 0, 0, 0.2);
+    background-color: var(--color-border-secondary, #cbcfd2);
   }
 `;
 
@@ -27,26 +27,24 @@ export const ScrollArea = styled.div`
   ${scrollbarStyle};
 `;
 
-export const Page = styled.div<{ hasSidebar?: boolean }>`
+export const Page = styled.div<{ $hasSidebar?: boolean }>`
   display: grid;
-  grid-template-columns: ${(props) => (props.hasSidebar ? "260px 1fr" : "1fr")};
+  grid-template-columns: ${(props) => (props.$hasSidebar ? "260px 1fr" : "1fr")};
   height: 100vh;
   width: 100vw;
   overflow: hidden;
 `;
 
 export const Sidebar = styled.aside`
-  background-color: #f8f9fa;
-  border-right: 1px solid #eee;
+  background-color: var(--color-bg-surface-primary, #f9f9fa);
+  border-right: 1px solid var(--color-border-muted, #e6e8ea);
   display: flex;
   flex-direction: column;
-
-  /* 핵심: 부모 높이를 다 채우고 고정 */
   height: 100%;
-  position: relative; /* sticky 대신 고정된 영역으로 작동 */
-
-  /* 사이드바 내부 메뉴가 많아질 경우를 대비 */
+  position: relative;
   overflow-y: auto;
+  padding: var(--space-12, 12px) var(--space-8, 8px);
+  gap: var(--space-4, 4px);
 `;
 
 export const Main = styled.main`
@@ -58,9 +56,10 @@ export const Main = styled.main`
 `;
 
 export const FixedTop = styled.div`
-  grid-row: 1; /* 첫 번째 줄 차지 */
+  grid-row: 1;
   z-index: 100;
-  background: #fff;
+  background: var(--color-bg-primary, #ffffff);
+  border-bottom: 1px solid var(--color-border-muted, #e6e8ea);
   position: sticky;
   top: 0;
 `;
@@ -75,8 +74,9 @@ export const FixedBottom = styled.div`
   position: sticky;
   bottom: 0;
   z-index: 100;
-  background: #fff;
-  padding: 16px;
+  background: var(--color-bg-primary, #ffffff);
+  border-top: 1px solid var(--color-border-muted, #e6e8ea);
+  padding: var(--space-16, 16px);
 `;
 
 export const ContentInner = styled.div<{

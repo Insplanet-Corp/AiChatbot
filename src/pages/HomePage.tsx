@@ -45,13 +45,13 @@ const HomePage = () => {
       <FixedTop>
         <TopNav>
           <NavTab
-            active={location.pathname.startsWith("/chat")}
+            $active={location.pathname.startsWith("/chat")}
             onClick={() => navigate("/chat")}
           >
             인력 찾기
           </NavTab>
           <NavTab
-            active={location.pathname.startsWith("/candidates")}
+            $active={location.pathname.startsWith("/candidates")}
             onClick={() => navigate("/candidates")}
           >
             인력 프로필
@@ -93,14 +93,14 @@ const TopNav = styled.nav`
   background: #fff;
 `;
 
-const NavTab = styled.button<{ active?: boolean }>`
+const NavTab = styled.button<{ $active?: boolean }>`
   padding: 14px 20px;
   font-size: 14px;
-  font-weight: ${({ active }) => (active ? 600 : 400)};
-  color: ${({ active }) => (active ? "#1a1a1a" : "#878a92")};
+  font-weight: ${({ $active }) => ($active ? 600 : 400)};
+  color: ${({ $active }) => ($active ? "#1a1a1a" : "#878a92")};
   background: none;
   border: none;
-  border-bottom: 2px solid ${({ active }) => (active ? "#1a1a1a" : "transparent")};
+  border-bottom: 2px solid ${({ $active }) => ($active ? "#1a1a1a" : "transparent")};
   cursor: pointer;
   margin-bottom: -1px;
   transition: color 0.15s, border-color 0.15s;

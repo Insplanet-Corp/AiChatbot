@@ -1,4 +1,5 @@
 import { useParams, useNavigate, useOutletContext } from "react-router-dom";
+import { SERVICE_NAME } from "../constants/service";
 import { supabase } from "../utils/supabase";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { fetchAndDecryptCandidate } from "../services/candidateService";
@@ -177,7 +178,7 @@ const CandidateDetailPane = () => {
           <DetailCard>
             <Section>
               <Text variant="headingXs" weight="bold">
-                AI 요약평 ✨
+                {SERVICE_NAME} 요약평 ✨
               </Text>
               <AISummaryBox>
                 <SummaryTextWrapper>
@@ -191,7 +192,7 @@ const CandidateDetailPane = () => {
                   </Text>
                   <ScoreValue>{data.matchScore}%</ScoreValue>
                   <ProgressBarWrapper>
-                    <ProgressBar percent={data.matchScore} />
+                    <ProgressBar $percent={data.matchScore} />
                   </ProgressBarWrapper>
                 </ScoreBox>
               </AISummaryBox>
@@ -480,8 +481,8 @@ const ProgressBarWrapper = styled.div`
   overflow: hidden;
 `;
 
-const ProgressBar = styled.div<{ percent: number }>`
-  width: ${(props) => props.percent}%;
+const ProgressBar = styled.div<{ $percent: number }>`
+  width: ${(props) => props.$percent}%;
   height: 100%;
   background-color: #7c3aed;
 `;

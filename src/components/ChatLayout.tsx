@@ -21,7 +21,7 @@ const ChatLayout = () => {
   const { user } = useOutletContext<AuthContextType>();
 
   return (
-    <Page hasSidebar>
+    <Page $hasSidebar>
       <Sidebar>
         <Row justify="space-between" align="center">
           1
