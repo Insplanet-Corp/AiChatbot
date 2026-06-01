@@ -1,4 +1,4 @@
-import { useState, useCallback, ChangeEvent, KeyboardEvent } from "react";
+import { useState, useCallback, useRef, ChangeEvent, KeyboardEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { nanoid } from "nanoid";
 import { useQueryClient } from "@tanstack/react-query";
@@ -85,22 +85,50 @@ export const useChatSubmit = ({
     [handleSubmit],
   );
 
-  const [lastDroppedFile, setLastDroppedFile] = useState<File | null>(null);
+  const [lastDroppedFiles, setLastDroppedFiles] = useState<File[]>([]);
+  const [uploadProgress, setUploadProgress] = useState<{ current: number; total: number } | undefined>(undefined);
+  const isUploadingRef = useRef(false);
 
-  const handleFileDrop = useCallback(
-    async (file: File) => {
-      setLastDroppedFile(file);
-      resumeUpload.reset();
-      resumeUpload.mutate(file);
+  const uploadFiles = useCallback(
+    async (files: File[]) => {
+      if (isUploadingRef.current) return;
+      isUploadingRef.current = true;
+      setUploadProgress({ current: 0, total: files.length });
+
+      for (let i = 0; i < files.length; i++) {
+        setUploadProgress({ current: i + 1, total: files.length });
+        resumeUpload.reset();
+        await new Promise<void>((resolve, reject) => {
+          resumeUpload.mutate(files[i], {
+            onSuccess: () => resolve(),
+            onError: () => reject(new Error(`파일 ${files[i].name} 업로드 실패`)),
+          });
+        });
+      }
+
+      isUploadingRef.current = false;
+      setUploadProgress(undefined);
     },
     [resumeUpload],
   );
 
+  const handleFileDrop = useCallback(
+    async (files: File[]) => {
+      setLastDroppedFiles(files);
+      try {
+        await uploadFiles(files);
+      } catch {
+        isUploadingRef.current = false;
+        setUploadProgress(undefined);
+      }
+    },
+    [uploadFiles],
+  );
+
   const handleRetry = useCallback(() => {
-    if (!lastDroppedFile) return;
-    resumeUpload.reset();
-    resumeUpload.mutate(lastDroppedFile);
-  }, [lastDroppedFile, resumeUpload]);
+    if (!lastDroppedFiles.length) return;
+    uploadFiles(lastDroppedFiles).catch(() => {});
+  }, [lastDroppedFiles, uploadFiles]);
 
   return {
     prompt,
@@ -111,5 +139,6 @@ export const useChatSubmit = ({
       setPrompt(e.target.value),
     handleFileDrop,
     handleRetry,
+    uploadProgress,
   };
 };

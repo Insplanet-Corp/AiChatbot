@@ -3,10 +3,11 @@ import { SERVICE_NAME } from "../constants/service";
 
 interface DragDropWrapperProps {
   children: ReactNode;
-  onFileDrop: (file: File) => void;
+  onFileDrop: (files: File[]) => void;
   isUploading?: boolean;
   uploadError?: boolean;
   onRetry?: () => void;
+  uploadProgress?: { current: number; total: number };
 }
 
 export default function DragDropWrapper({
@@ -15,6 +16,7 @@ export default function DragDropWrapper({
   isUploading = false,
   uploadError = false,
   onRetry,
+  uploadProgress,
 }: DragDropWrapperProps) {
   const [isDragging, setIsDragging] = useState(false);
 
@@ -42,7 +44,8 @@ export default function DragDropWrapper({
     setIsDragging(false);
     if (isUploading) return;
     if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-      onFileDrop(e.dataTransfer.files[0]);
+      const files = Array.from(e.dataTransfer.files).slice(0, 10);
+      onFileDrop(files);
     }
   };
 
@@ -123,7 +126,9 @@ export default function DragDropWrapper({
         >
           <Spinner />
           <div style={{ fontWeight: "bold", color: "#374151", fontSize: "14px" }}>
-            이력서 분석 중...
+            {uploadProgress && uploadProgress.total > 1
+              ? `이력서 분석 중... (${uploadProgress.current}/${uploadProgress.total})`
+              : "이력서 분석 중..."}
           </div>
           <div style={{ color: "#6b7280", fontSize: "12px" }}>
             {SERVICE_NAME}이 이력서를 읽고 있습니다. 잠시만 기다려주세요.

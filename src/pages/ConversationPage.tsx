@@ -29,7 +29,7 @@ const ConversationPage = () => {
     { label: "리액트 경험있는 퍼블리셔", value: "React 경험이 있는 퍼블리셔를 찾아주세요." },
   ];
 
-  const { prompt, setPrompt, handleChange, handleKeyDown, handleSubmit, handleFileDrop, handleRetry } =
+  const { prompt, setPrompt, handleChange, handleKeyDown, handleSubmit, handleFileDrop, handleRetry, uploadProgress } =
     useChatSubmit({
       roomID: roomID,
       user: user || { id: "" },
@@ -68,6 +68,7 @@ const ConversationPage = () => {
             onFileDrop={handleFileDrop}
             isUploading={resumeUpload.isPending}
             uploadError={resumeUpload.isError}
+            uploadProgress={uploadProgress}
             onRetry={handleRetry}
             suggestions={!roomID ? SUGGESTIONS : undefined}
             onSuggestionClick={(val) => setPrompt(val)}
