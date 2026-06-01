@@ -1,4 +1,4 @@
-import { useNavigate, Outlet } from "react-router-dom";
+import { useNavigate, Outlet, useLocation } from "react-router-dom";
 import styled from "styled-components";
 import { decryptJSON } from "../utils/encrypt";
 import { useCandidateList } from "../hooks/queries";
@@ -93,6 +93,7 @@ const mapRowToCardData = (row: any) => {
 
 const CandidatesPage = () => {
   const navigate = useNavigate();
+  const location = useLocation();
 
   const { data: rows = [], isLoading, isError } = useCandidateList();
 
@@ -100,8 +101,22 @@ const CandidatesPage = () => {
 
   return (
     <Main>
-      <ContentInner size="wide">
-        <FixedTop>
+      <FixedTop>
+        <TopNav>
+          <NavTab
+            active={location.pathname.startsWith("/chat")}
+            onClick={() => navigate("/chat")}
+          >
+            인력 찾기
+          </NavTab>
+          <NavTab
+            active={location.pathname.startsWith("/candidates")}
+            onClick={() => navigate("/candidates")}
+          >
+            인력 프로필
+          </NavTab>
+        </TopNav>
+        <ContentInner size="wide">
           <HeaderRow>
             <Text variant="headingSm" weight="bold" as="h2">
               인력 프로필
@@ -110,8 +125,8 @@ const CandidatesPage = () => {
               총 {candidates.length}명
             </Text>
           </HeaderRow>
-        </FixedTop>
-      </ContentInner>
+        </ContentInner>
+      </FixedTop>
 
       <ScrollBody>
         <ContentInner size="wide">
@@ -153,6 +168,32 @@ const CandidatesPage = () => {
     </Main>
   );
 };
+
+const TopNav = styled.nav`
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 2rem;
+  border-bottom: 1px solid #eee;
+  background: #fff;
+`;
+
+const NavTab = styled.button<{ active?: boolean }>`
+  padding: 14px 20px;
+  font-size: 14px;
+  font-weight: ${({ active }) => (active ? 600 : 400)};
+  color: ${({ active }) => (active ? "#1a1a1a" : "#878a92")};
+  background: none;
+  border: none;
+  border-bottom: 2px solid ${({ active }) => (active ? "#1a1a1a" : "transparent")};
+  cursor: pointer;
+  margin-bottom: -1px;
+  transition: color 0.15s, border-color 0.15s;
+
+  &:hover {
+    color: #1a1a1a;
+  }
+`;
 
 const HeaderRow = styled.div`
   display: flex;
