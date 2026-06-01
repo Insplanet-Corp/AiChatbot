@@ -67,6 +67,9 @@ const fetchAndDecryptCandidate = async (id: string) => {
           period: `${w.start_date || ""} ~ ${w.end_date || "현재"}`,
           company: w.company_name,
           role: `${w.department || ""} / ${w.job_title || ""}`,
+          responsibilities: w.responsibilities || "",
+          tech_stack: Array.isArray(w.tech_stack) ? w.tech_stack : [],
+          key_achievements: Array.isArray(w.key_achievements) ? w.key_achievements : [],
         }))
       : [],
     majorExperience: Array.isArray(rd?.projects)
@@ -74,6 +77,9 @@ const fetchAndDecryptCandidate = async (id: string) => {
           period: `${p.start_date || ""} ~ ${p.end_date || "현재"}`,
           project: p.project_name,
           role: p.role_and_tasks,
+          tech_stack: Array.isArray(p.tech_stack) ? p.tech_stack : [],
+          outcomes: p.outcomes || "",
+          scale: p.scale || "",
         }))
       : [],
   };

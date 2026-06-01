@@ -62,6 +62,7 @@ const HomePage = () => {
           onSubmit={handleSubmit}
           onKeyDown={handleKeyDown}
           onFileDrop={handleFileDrop}
+          isUploading={resumeUpload.isPending}
         />
       </CenterWrapper>
     </Main>

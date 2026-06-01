@@ -8,6 +8,7 @@ interface Props {
   onSubmit: (e: React.FormEvent<HTMLFormElement>) => void;
   onKeyDown: (e: React.KeyboardEvent<HTMLFormElement>) => void;
   onFileDrop: (file: File) => void;
+  isUploading?: boolean;
 }
 
 const PromptInput = ({
@@ -16,9 +17,10 @@ const PromptInput = ({
   onSubmit,
   onKeyDown,
   onFileDrop,
+  isUploading = false,
 }: Props) => {
   return (
-    <DragDropWrapper onFileDrop={onFileDrop}>
+    <DragDropWrapper onFileDrop={onFileDrop} isUploading={isUploading}>
       <form className="promptInput" onSubmit={onSubmit} onKeyDown={onKeyDown}>
         <PromptInputTextarea value={value} setMessage={setPrompt} />
         <Row justify="space-between">

@@ -89,6 +89,7 @@ const ConversationPage = () => {
             onSubmit={handleSubmit}
             onKeyDown={handleKeyDown}
             onFileDrop={handleFileDrop}
+            isUploading={resumeUpload.isPending}
           />
           {/* <Suggestions>
             {[

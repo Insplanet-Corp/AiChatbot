@@ -3,11 +3,13 @@ import { useState, DragEvent, ReactNode } from "react";
 interface DragDropWrapperProps {
   children: ReactNode;
   onFileDrop: (file: File) => void;
+  isUploading?: boolean;
 }
 
 export default function DragDropWrapper({
   children,
   onFileDrop,
+  isUploading = false,
 }: DragDropWrapperProps) {
   const [isDragging, setIsDragging] = useState(false);
 
@@ -33,10 +35,9 @@ export default function DragDropWrapper({
     e.preventDefault();
     e.stopPropagation();
     setIsDragging(false);
-
+    if (isUploading) return;
     if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-      const file = e.dataTransfer.files[0];
-      onFileDrop(file);
+      onFileDrop(e.dataTransfer.files[0]);
     }
   };
 
@@ -46,10 +47,41 @@ export default function DragDropWrapper({
       onDragLeave={handleDragLeave}
       onDragOver={handleDragOver}
       onDrop={handleDrop}
-      style={{ position: "relative", width: "100%" }} // relative 필수
+      style={{ position: "relative", width: "100%" }}
     >
-      {/* 드래그 시 나타나는 오버레이 (Gemini 스타일) */}
-      {isDragging && (
+      {/* 업로드 중 오버레이 */}
+      {isUploading && (
+        <div
+          style={{
+            position: "absolute",
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            zIndex: 50,
+            backgroundColor: "rgba(255, 255, 255, 0.92)",
+            borderRadius: "12px",
+            display: "flex",
+            flexDirection: "column",
+            justifyContent: "center",
+            alignItems: "center",
+            gap: "12px",
+            backdropFilter: "blur(4px)",
+            margin: "0 0",
+          }}
+        >
+          <Spinner />
+          <div style={{ fontWeight: "bold", color: "#374151", fontSize: "14px" }}>
+            이력서 분석 중...
+          </div>
+          <div style={{ color: "#6b7280", fontSize: "12px" }}>
+            AI가 이력서를 읽고 있습니다. 잠시만 기다려주세요.
+          </div>
+        </div>
+      )}
+
+      {/* 드래그 시 오버레이 */}
+      {isDragging && !isUploading && (
         <div
           style={{
             position: "absolute",
@@ -75,8 +107,24 @@ export default function DragDropWrapper({
         </div>
       )}
 
-      {/* 기존 컴포넌트들 */}
       {children}
+    </div>
+  );
+}
+
+function Spinner() {
+  return (
+    <div
+      style={{
+        width: "36px",
+        height: "36px",
+        border: "3px solid #e5e7eb",
+        borderTop: "3px solid #111827",
+        borderRadius: "50%",
+        animation: "spin 0.8s linear infinite",
+      }}
+    >
+      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
     </div>
   );
 }

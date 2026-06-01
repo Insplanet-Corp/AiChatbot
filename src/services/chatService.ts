@@ -103,6 +103,7 @@ const postChatWithSupabase = async ({
         educations = [],
         certifications = [],
         skills = [],
+        work_experiences = [],
         projects = [],
       } = rd;
 
@@ -156,6 +157,7 @@ const postChatWithSupabase = async ({
           internal_rating: internalRating,
         },
         introduction: introduction,
+        work_experiences: work_experiences,
         projects: projects,
       };
     });
@@ -170,6 +172,7 @@ const postChatWithSupabase = async ({
         const candidateForLLM = {
           introduction: candidate.introduction,
           skills: candidate.details.skills,
+          work_experiences: candidate.work_experiences,
           projects: candidate.projects,
         };
 
@@ -202,6 +205,7 @@ const postChatWithSupabase = async ({
             skills: parsedData.skills || candidate.details.skills,
           },
           reason: parsedData.reason || "조건에 부합하는 인재입니다.",
+          work_experiences: undefined,
           projects: undefined,
         });
 
