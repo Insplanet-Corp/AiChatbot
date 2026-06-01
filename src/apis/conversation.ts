@@ -59,9 +59,22 @@ async function createConversationMessage({
   return data; // 새로 만들어진 room row
 }
 
+async function deleteConversation(roomId: string) {
+  const { error: msgError } = await supabase
+    .from("messages")
+    .delete()
+    .eq("room_id", roomId);
+
+  if (msgError) throw msgError;
+
+  const { error } = await supabase.from("rooms").delete().eq("id", roomId);
+  if (error) throw error;
+}
+
 export {
   fetchConversations,
   fetchConversation,
   startConversation,
   createConversationMessage,
+  deleteConversation,
 };

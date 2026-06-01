@@ -3,6 +3,7 @@ import { nanoid } from "nanoid";
 import {
   startConversation,
   createConversationMessage,
+  deleteConversation,
 } from "../apis/conversation";
 import { postChat } from "../services/chatService";
 import { parseAndSaveResume } from "../services/resumeService";
@@ -177,10 +178,21 @@ const useCandidateList = () => {
   });
 };
 
+const useDeleteConversation = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: deleteConversation,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["conversations"] });
+    },
+  });
+};
+
 export {
   useStartConversation,
   useConversationMessage,
   useConversationResponse,
   useResumeUpload,
   useCandidateList,
+  useDeleteConversation,
 };
