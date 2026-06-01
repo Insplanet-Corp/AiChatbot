@@ -120,35 +120,38 @@ const CandidateDetailPane = () => {
 
   if (isLoading) {
     return (
-      <PaneWrapper style={{ justifyContent: "center", alignItems: "center" }}>
-        <h2>데이터를 불러오는 중입니다...</h2>
-      </PaneWrapper>
+      <Overlay onClick={() => navigate("..")}>
+        <PaneWrapper onClick={(e) => e.stopPropagation()} style={{ justifyContent: "center", alignItems: "center" }}>
+          <h2>데이터를 불러오는 중입니다...</h2>
+        </PaneWrapper>
+      </Overlay>
     );
   }
 
   if (isError || !data) {
     return (
-      <PaneWrapper style={{ justifyContent: "center", alignItems: "center" }}>
-        <h2>데이터를 불러오는데 실패했습니다.</h2>
-        <button onClick={() => navigate("..")}>돌아가기</button>
-      </PaneWrapper>
+      <Overlay onClick={() => navigate("..")}>
+        <PaneWrapper onClick={(e) => e.stopPropagation()} style={{ justifyContent: "center", alignItems: "center" }}>
+          <h2>데이터를 불러오는데 실패했습니다.</h2>
+          <button onClick={() => navigate("..")}>돌아가기</button>
+        </PaneWrapper>
+      </Overlay>
     );
   }
 
   return (
+    <Overlay onClick={() => navigate("..")}>
     <motion.div
-      // 초기 상태: 작고 투명함
       initial={{ opacity: 0, scale: 0.9, x: 0 }}
-      // 나타날 때 상태: 원래 크기
       animate={{ opacity: 1, scale: 1, x: 0 }}
-      // 사라질 때 상태 (AnimatePresence 사용 시)
       exit={{ opacity: 0, scale: 0.9, x: 0 }}
       transition={{
-        type: "spring", // 튕기는 듯한 물리 효과
+        type: "spring",
         stiffness: 300,
         damping: 25,
       }}
-      style={{}}
+      style={{ width: "100%", maxWidth: 720 }}
+      onClick={(e) => e.stopPropagation()}
     >
       <PaneWrapper>
         <Header>
@@ -335,20 +338,32 @@ const CandidateDetailPane = () => {
         </ContentArea>
       </PaneWrapper>
     </motion.div>
+    </Overlay>
   );
 };
 
+const Overlay = styled.div`
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background: rgba(0, 0, 0, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+`;
+
 const PaneWrapper = styled.aside`
-  min-width: max-content;
-  max-width: 640px;
-  height: stretch;
-  margin: 2rem;
+  width: 100%;
+  max-width: 720px;
+  max-height: 90vh;
   background-color: var(--color-bg-primary, #ffffff);
   border: 1px solid var(--color-border-muted, #e6e8ea);
   border-radius: var(--radius-xl, 16px);
   display: flex;
   flex-direction: column;
   box-shadow: var(--shadow-3);
+  overflow: hidden;
 `;
 
 const SummaryTextWrapper = styled.div`
