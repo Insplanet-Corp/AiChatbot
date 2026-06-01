@@ -31,17 +31,24 @@ const StyledMenuItem = styled.button<{
   width: 100%;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 10px 12px;
+  gap: var(--space-8, 8px);
+  padding: var(--space-8, 8px) var(--space-12, 12px);
   border: none;
-  border-radius: 8px;
+  border-radius: var(--radius-md, 8px);
   background: transparent;
   cursor: pointer;
-  transition: background 0.2s ease;
-  font-size: 14px;
+  transition: background-color 0.15s ease;
+  font-size: var(--font-size-label-md, 14px);
+  font-weight: var(--font-weight-medium, 500);
+  color: var(--color-text-primary, #3c3e44);
+  text-align: left;
 
   &:hover {
-    background-color: #f5f5f5;
+    background-color: var(--color-interaction-hover-strong, rgba(24, 26, 27, 0.16));
+  }
+
+  &:active {
+    background-color: var(--color-interaction-pressed, rgba(24, 26, 27, 0.08));
   }
 
   ${(props) =>
@@ -55,9 +62,9 @@ const StyledMenuItem = styled.button<{
   ${(props) =>
     props.$danger &&
     css`
-      color: #ff4d4f;
+      color: var(--color-text-status-negative, #d52525);
       &:hover {
-        background-color: #fff1f0;
+        background-color: #fff0f0;
       }
     `}
 `;

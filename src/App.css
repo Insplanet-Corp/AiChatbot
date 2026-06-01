@@ -1,52 +1,164 @@
 @import url("https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css");
 
-#root {
-  width: 100%;
+/* ============================================
+   Design System Tokens (RingSystem Enterprise)
+   ============================================ */
 
-  --size-medium: 40px;
+:root {
+  /* --- Color: Text --- */
+  --color-text-emphasis: #181a1b;
+  --color-text-primary: #3c3e44;
+  --color-text-secondary: #6d7178;
+  --color-text-tertiary: #878a92;
+  --color-text-muted: #9b9fa6;
+  --color-text-inverse: #ffffff;
+  --color-text-brand-primary: #4949d4;
+  --color-text-brand-secondary: #616ee5;
+  --color-text-brand-tertiary: #8fa3fa;
+  --color-text-status-negative: #d52525;
+  --color-text-status-warning: #b24c00;
+  --color-text-status-positive: #09721a;
+  --color-text-status-info: #0f59c7;
 
-  --color-primary: #000;
-  --color-background: #fff;
+  /* --- Color: Background --- */
+  --color-bg-primary: #ffffff;
+  --color-bg-secondary: #f1f2f4;
+  --color-bg-surface-primary: #f9f9fa;
+  --color-bg-surface-secondary: #e6e8ea;
+  --color-bg-surface-tertiary: #dde0e3;
+  --color-bg-surface-floating: #ffffff;
+  --color-bg-surface-brand: #e2eafe;
+  --color-bg-solid-primary: #333538;
+  --color-bg-solid-brand: #4949d4;
 
-  --border: 1px solid #eee;
+  /* --- Color: Border --- */
+  --color-border-primary: #55585e;
+  --color-border-secondary: #cbcfd2;
+  --color-border-tertiary: #dde0e3;
+  --color-border-muted: #e6e8ea;
+  --color-border-brand: #4949d4;
+  --color-border-status-negative: #ec4141;
 
-  --shadow: 0 1px 2px 0 #0000000d;
+  /* --- Color: Icon --- */
+  --color-icon-primary: #3c3e44;
+  --color-icon-secondary: #6d7178;
+  --color-icon-tertiary: #878a92;
+  --color-icon-muted: #9b9fa6;
+  --color-icon-brand: #4949d4;
+  --color-icon-inverse: #ffffff;
 
-  --chat-spacing: 1rem;
+  /* --- Interaction --- */
+  --color-interaction-hover: rgba(24, 26, 27, 0.04);
+  --color-interaction-hover-strong: rgba(24, 26, 27, 0.16);
+  --color-interaction-pressed: rgba(24, 26, 27, 0.08);
+  --color-interaction-focus-outline: #23c7cd;
+  --color-interaction-disabled: #b3b7bd;
+  --color-interaction-selected: rgba(73, 108, 212, 0.08);
 
-  --grid-margin: 1rem;
+  /* --- Spacing --- */
+  --space-0: 0px;
+  --space-2: 2px;
+  --space-4: 4px;
+  --space-8: 8px;
+  --space-12: 12px;
+  --space-16: 16px;
+  --space-20: 20px;
+  --space-24: 24px;
+  --space-32: 32px;
 
-  --sidebar-width: 240px;
+  /* --- Border Radius --- */
+  --radius-none: 0px;
+  --radius-xs: 4px;
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius-full: 999px;
+
+  /* --- Elevation / Shadow --- */
+  --shadow-1: 0 1px 2px rgba(24, 26, 27, 0.08);
+  --shadow-2: 0 2px 8px rgba(24, 26, 27, 0.10);
+  --shadow-3: 0 4px 16px rgba(24, 26, 27, 0.12);
+  --shadow-4: 0 8px 24px rgba(24, 26, 27, 0.16);
+  --shadow-5: 0 16px 40px rgba(24, 26, 27, 0.20);
+
+  /* --- Typography Scale (px) --- */
+  --font-size-display-lg: 72px;
+  --font-size-display-md: 64px;
+  --font-size-display-sm: 48px;
+  --font-size-heading-xl: 40px;
+  --font-size-heading-lg: 32px;
+  --font-size-heading-md: 24px;
+  --font-size-heading-sm: 20px;
+  --font-size-heading-xs: 16px;
+  --font-size-body-lg: 16px;
+  --font-size-body-md: 14px;
+  --font-size-body-sm: 12px;
+  --font-size-label-lg: 16px;
+  --font-size-label-md: 14px;
+  --font-size-label-sm: 12px;
+  --font-size-caption-md: 12px;
+  --font-size-caption-sm: 11px;
+
+  /* --- Font Weight --- */
+  --font-weight-regular: 400;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+  --font-weight-bold: 700;
+
+  /* --- Layout --- */
+  --sidebar-width: 260px;
   --chat-width: 720px;
+  --size-medium: 40px;
 }
+
+/* ============================================
+   Base Styles
+   ============================================ */
 
 body {
   margin: 0;
   min-width: 320px;
   min-height: 100vh;
-  font-family: "Pretendard";
-  line-height: 1.6;
-  font-weight: 500;
+  font-family: "Pretendard", system-ui, -apple-system, sans-serif;
+  font-size: var(--font-size-body-md);
+  font-weight: var(--font-weight-regular);
+  line-height: 1.7;
+  color: var(--color-text-primary);
+  background-color: var(--color-bg-primary);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
-input {
-  font: inherit;
+#root {
+  width: 100%;
 }
 
-.card {
-  padding: 2em;
+input,
+textarea,
+button {
+  font-family: inherit;
+  font-size: inherit;
 }
 
-.read-the-docs {
-  color: #888;
-}
+/* ============================================
+   Conversation List
+   ============================================ */
 
 .conversationList {
   display: flex;
   flex-direction: column;
-  /* overflow: auto; */
   width: 100%;
+  gap: var(--space-2);
+  overflow-y: auto;
+  flex: 1;
+  min-height: 0;
+  padding: var(--space-4) 0;
 }
+
+/* ============================================
+   Prompt Input
+   ============================================ */
 
 .promptInput {
   display: flex;
@@ -54,83 +166,135 @@ input {
   width: 100%;
   max-width: var(--chat-width);
   margin: 0 auto;
-  border-radius: 1rem;
-  gap: 0.5rem;
-  padding: 1rem 1rem;
+  border-radius: var(--radius-lg);
+  gap: var(--space-8);
+  padding: var(--space-12) var(--space-16);
   box-sizing: border-box;
-  background-color: #fff;
-  border: var(--border);
-  box-shadow: var(--shadow);
+  background-color: var(--color-bg-primary);
+  border: 1px solid var(--color-border-muted);
+  box-shadow: var(--shadow-1);
+  transition: box-shadow 0.2s ease, border-color 0.2s ease;
 }
+
+.promptInput:focus-within {
+  border-color: var(--color-border-secondary);
+  box-shadow: var(--shadow-2);
+}
+
+.promptInputTextarea {
+  flex: 1;
+  min-height: 40px;
+  max-height: 200px;
+  outline: none;
+  background-color: transparent;
+  border: 0;
+  resize: none;
+  font: inherit;
+  font-size: var(--font-size-body-md);
+  color: var(--color-text-primary);
+  line-height: 1.7;
+}
+
+.promptInputTextarea::placeholder {
+  color: var(--color-text-muted);
+}
+
+/* ============================================
+   Suggestions
+   ============================================ */
 
 .suggestions {
   display: flex;
   flex-wrap: wrap;
   max-width: var(--chat-width);
   margin: 0 auto;
-  gap: 0.5rem;
-  padding-block: 1rem;
-  background: #fff;
+  gap: var(--space-8);
+  padding-block: var(--space-16);
 }
 
 .suggestion {
-  padding: 0.75rem 1rem;
-  border-radius: 50px;
-  background-color: var(--color-background);
-  border: var(--border);
-  box-shadow: 1px 1px 2px rgba(0, 0, 0, 0.075);
-  font-weight: 500;
+  padding: var(--space-8) var(--space-16);
+  border-radius: var(--radius-full);
+  background-color: var(--color-bg-primary);
+  border: 1px solid var(--color-border-muted);
+  box-shadow: var(--shadow-1);
+  font-size: var(--font-size-label-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-secondary);
   cursor: pointer;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
 }
 
-.promptInputTextarea {
-  flex: 1;
-  height: 40px;
-  outline: none;
-  background-color: transparent;
-  border: 0;
-  resize: none;
-  font: inherit;
+.suggestion:hover {
+  background-color: var(--color-bg-surface-primary);
+  border-color: var(--color-border-secondary);
 }
 
-.chatInput::placeholder {
-  color: rgba(233, 236, 241, 0.45);
-}
+/* ============================================
+   Icon Buttons
+   ============================================ */
+
 .iconButton {
   display: flex;
   align-items: center;
   justify-content: center;
   width: 32px;
   height: 32px;
-  border-radius: 12px;
+  border-radius: var(--radius-md);
   border: none;
   background: transparent;
+  color: var(--color-icon-secondary);
   cursor: pointer;
+  transition: background-color 0.15s ease, color 0.15s ease;
 }
+
+.iconButton:hover {
+  background-color: var(--color-interaction-hover-strong);
+  color: var(--color-icon-primary);
+}
+
 .sendBtn {
   display: flex;
   align-items: center;
   justify-content: center;
   width: 32px;
   height: 32px;
-  border-radius: 12px;
-  background-color: var(--color-primary);
-  color: #fff;
-  border-radius: 50%;
+  border: none;
+  border-radius: var(--radius-full);
+  background-color: var(--color-bg-solid-brand);
+  color: var(--color-text-inverse);
+  cursor: pointer;
+  transition: opacity 0.15s ease;
 }
+
+.sendBtn:hover {
+  opacity: 0.88;
+}
+
+/* ============================================
+   Loader
+   ============================================ */
 
 .loader {
   margin-top: 50px;
+  display: flex;
+  justify-content: center;
 }
 
-.roomListInput:focus {
-  outline: none;
-}
+/* ============================================
+   Room List Input
+   ============================================ */
 
 .roomListInput {
   width: 100%;
   outline: none;
   border: none;
   background: transparent;
-  margin-top: 10px;
+  margin-top: var(--space-8);
+  font-size: var(--font-size-label-sm);
+  color: var(--color-text-primary);
+}
+
+.roomListInput:focus {
+  outline: none;
 }

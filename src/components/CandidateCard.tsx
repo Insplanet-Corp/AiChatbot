@@ -1,6 +1,7 @@
 import styled from "styled-components";
 import Text from "./common/text/Text";
 import Icon from "./common/Icon/Icon";
+import { Avatar } from "./common/avatar";
 
 const renderStars = (rating) => {
   if (!rating) return "-";
@@ -18,9 +19,7 @@ const CandidateCard = ({ data, onClick }) => {
   return (
     <Card onClick={onClick}>
       <Header>
-        <ProfileImage>
-          <img src={data.profile_image} alt={data.name} />
-        </ProfileImage>
+        <Avatar style="photo" src={data.profile_image} alt={data.name} size={48} seed={data.name} />
 
         <UserInfo>
           <NameWrapper>
@@ -46,21 +45,21 @@ const CandidateCard = ({ data, onClick }) => {
           </MetaInfo>
         </UserInfo>
 
-        <Icon name="Star" color="#878A92" />
+        <Icon name="Star" color="var(--color-icon-tertiary, #878a92)" />
       </Header>
 
       <Divider />
 
       <DetailList>
         <DetailRow>
-          <Text variant="labelSm" color="#878a92">
+          <Text variant="labelSm" color="var(--color-text-tertiary, #878a92)">
             최종학력
           </Text>
           <Value>{data.details?.final_education || "-"}</Value>
         </DetailRow>
 
         <DetailRow>
-          <Text variant="labelSm" color="#878a92">
+          <Text variant="labelSm" color="var(--color-text-tertiary, #878a92)">
             보유자격
           </Text>
           <Value>
@@ -71,7 +70,7 @@ const CandidateCard = ({ data, onClick }) => {
         </DetailRow>
 
         <DetailRow>
-          <Text variant="labelSm" color="#878a92">
+          <Text variant="labelSm" color="var(--color-text-tertiary, #878a92)">
             경력사항
           </Text>
           <Value className="truncate">
@@ -80,7 +79,7 @@ const CandidateCard = ({ data, onClick }) => {
         </DetailRow>
 
         <DetailRow>
-          <Text variant="labelSm" color="#878a92">
+          <Text variant="labelSm" color="var(--color-text-tertiary, #878a92)">
             보유기술
           </Text>
           <SkillContainer>
@@ -92,7 +91,7 @@ const CandidateCard = ({ data, onClick }) => {
         </DetailRow>
 
         <DetailRow>
-          <Text variant="labelSm" color="#878a92">
+          <Text variant="labelSm" color="var(--color-text-tertiary, #878a92)">
             내부평가
           </Text>
           <Value className="rating">
@@ -109,38 +108,29 @@ const CandidateCard = ({ data, onClick }) => {
 };
 
 const Card = styled.div`
-  // width: 360px;
-  // TODO 왜 3.5이지 일단 패스
   width: calc(50% - 3.5rem);
-  background-color: #ffffff;
-  border-radius: 24px;
-  padding: 24px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
-  font-family: sans-serif;
+  background-color: var(--color-bg-primary, #ffffff);
+  border: 1px solid var(--color-border-muted, #e6e8ea);
+  border-radius: var(--radius-xl, 16px);
+  padding: var(--space-20, 20px);
+  box-shadow: var(--shadow-2);
   position: relative;
+  cursor: pointer;
+  transition: box-shadow 0.15s ease, border-color 0.15s ease;
+
+  &:hover {
+    box-shadow: var(--shadow-3);
+    border-color: var(--color-border-secondary, #cbcfd2);
+  }
 `;
 
 const Header = styled.div`
   display: flex;
   align-items: flex-start;
-  margin-bottom: 20px;
+  gap: var(--space-12, 12px);
+  margin-bottom: var(--space-16, 16px);
 `;
 
-const ProfileImage = styled.div`
-  width: 48px;
-  height: 48px;
-  border-radius: 50%;
-  background-color: #f0f0f0;
-  overflow: hidden;
-  margin-right: 12px;
-  flex-shrink: 0;
-
-  img {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-  }
-`;
 
 const UserInfo = styled.div`
   flex: 1;
@@ -165,22 +155,22 @@ const Badge = styled.span<{ bgColor?: string; textColor?: string }>`
 `;
 
 const MetaInfo = styled.div`
-  font-size: 12px;
-  color: #6d7178;
+  font-size: var(--font-size-label-sm, 12px);
+  color: var(--color-text-secondary, #6d7178);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 
   .category {
     color: #00838a;
-    font-weight: bold;
+    font-weight: var(--font-weight-semibold, 600);
   }
 `;
 
 const Divider = styled.hr`
   border: none;
-  border-top: 1px solid #f0f0f0;
-  margin-bottom: 20px;
+  border-top: 1px solid var(--color-border-muted, #e6e8ea);
+  margin: var(--space-16, 16px) 0;
 `;
 
 const DetailList = styled.div`
@@ -199,10 +189,10 @@ const DetailRow = styled.div`
 
 const Value = styled.span`
   flex: 1;
-  color: #222;
-  font-weight: 500;
+  color: var(--color-text-emphasis, #181a1b);
+  font-weight: var(--font-weight-medium, 500);
   min-width: 0;
-  font-size: 14px;
+  font-size: var(--font-size-label-md, 14px);
 
   &.truncate {
     white-space: nowrap;
@@ -211,37 +201,39 @@ const Value = styled.span`
   }
 
   &.rating {
-    font-size: 16px;
-    color: #444;
+    font-size: var(--font-size-body-lg, 16px);
+    color: var(--color-text-primary, #3c3e44);
     letter-spacing: 2px;
   }
 `;
 
 const SkillContainer = styled.div`
   display: flex;
-  gap: 6px;
+  gap: var(--space-4, 4px);
   flex-wrap: wrap;
   flex: 1;
 `;
 
 const SkillTag = styled.span`
-  background-color: #f1f2f4;
-  color: #444;
-  font-size: 12px;
-  padding: 2px 4px;
-  border-radius: 4px;
+  background-color: var(--color-bg-secondary, #f1f2f4);
+  color: var(--color-text-secondary, #6d7178);
+  font-size: var(--font-size-caption-md, 12px);
+  font-weight: var(--font-weight-medium, 500);
+  padding: 2px 6px;
+  border-radius: var(--radius-xs, 4px);
 `;
 
 const IntroBox = styled.div`
-  background-color: #f1f2f4;
-  padding: 16px;
-  border-radius: 16px;
+  background-color: var(--color-bg-surface-primary, #f9f9fa);
+  padding: var(--space-12, 12px) var(--space-16, 16px);
+  border-radius: var(--radius-lg, 12px);
+  margin-top: var(--space-4, 4px);
 `;
 
 const Intro = styled.p`
-  font-size: 12px;
-  color: #333;
-  line-height: 1.5;
+  font-size: var(--font-size-body-sm, 12px);
+  color: var(--color-text-secondary, #6d7178);
+  line-height: 1.6;
 
   display: -webkit-box;
   -webkit-box-orient: vertical;

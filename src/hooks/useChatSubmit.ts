@@ -85,11 +85,22 @@ export const useChatSubmit = ({
     [handleSubmit],
   );
 
-  const handleFileDrop = useCallback(async (file: File) => {
-    console.log("handleFileDrop", file.name);
+  const [lastDroppedFile, setLastDroppedFile] = useState<File | null>(null);
 
-    resumeUpload.mutate(file);
-  }, []);
+  const handleFileDrop = useCallback(
+    async (file: File) => {
+      setLastDroppedFile(file);
+      resumeUpload.reset();
+      resumeUpload.mutate(file);
+    },
+    [resumeUpload],
+  );
+
+  const handleRetry = useCallback(() => {
+    if (!lastDroppedFile) return;
+    resumeUpload.reset();
+    resumeUpload.mutate(lastDroppedFile);
+  }, [lastDroppedFile, resumeUpload]);
 
   return {
     prompt,
@@ -99,5 +110,6 @@ export const useChatSubmit = ({
     handleChange: (e: ChangeEvent<HTMLTextAreaElement>) =>
       setPrompt(e.target.value),
     handleFileDrop,
+    handleRetry,
   };
 };

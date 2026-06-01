@@ -158,7 +158,6 @@ const useResumeUpload = (roomID?: string) => {
     },
     onError: (error) => {
       console.error("이력서 처리 중 오류 발생:", error);
-      alert("파일을 처리하는 중 오류가 발생했습니다.");
     },
   });
 };

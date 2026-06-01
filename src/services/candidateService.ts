@@ -1,5 +1,6 @@
 import { supabase } from "../utils/supabase";
 import { decryptJSON } from "../utils/encrypt";
+import { SERVICE_NAME } from "../constants/service";
 
 const fetchAndDecryptCandidate = async (id: string) => {
   const { data, error } = await supabase
@@ -44,14 +45,12 @@ const fetchAndDecryptCandidate = async (id: string) => {
     phone: rd?.personal_info?.phone || "연락처 없음",
     email: rd?.personal_info?.email || "이메일 없음",
     address: rd?.personal_info?.address || "주소 미상",
-    profileImage:
-      rd?.personal_info?.profile_image_url ||
-      "https://cdn.pixabay.com/photo/2015/10/05/22/37/blank-profile-picture-973460_1280.png",
+    profileImage: rd?.personal_info?.profile_image_url || null,
 
     aiSummary:
       rd?.evaluation?.one_line_review ||
       rd?.professional_summary?.introduction ||
-      "AI 요약평이 없습니다.",
+      `${SERVICE_NAME} 요약평이 없습니다.`,
     matchScore: 82,
 
     skills: {

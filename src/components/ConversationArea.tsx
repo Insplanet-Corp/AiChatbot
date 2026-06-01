@@ -56,12 +56,13 @@ const ConversationArea = ({
       })}
 
       {isAITyping && (
-        <Box
-          style={{
-            padding: "10px",
-          }}
-        >
-          <SyncLoader color="#000000" loading size={8} speedMultiplier={0.6} />
+        <Box style={{ padding: "var(--space-8, 8px)" }}>
+          <SyncLoader
+            color="var(--color-text-muted, #9b9fa6)"
+            loading
+            size={6}
+            speedMultiplier={0.6}
+          />
         </Box>
       )}
     </Box>

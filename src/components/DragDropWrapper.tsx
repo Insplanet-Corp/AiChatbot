@@ -1,15 +1,20 @@
 import { useState, DragEvent, ReactNode } from "react";
+import { SERVICE_NAME } from "../constants/service";
 
 interface DragDropWrapperProps {
   children: ReactNode;
   onFileDrop: (file: File) => void;
   isUploading?: boolean;
+  uploadError?: boolean;
+  onRetry?: () => void;
 }
 
 export default function DragDropWrapper({
   children,
   onFileDrop,
   isUploading = false,
+  uploadError = false,
+  onRetry,
 }: DragDropWrapperProps) {
   const [isDragging, setIsDragging] = useState(false);
 
@@ -49,6 +54,52 @@ export default function DragDropWrapper({
       onDrop={handleDrop}
       style={{ position: "relative", width: "100%" }}
     >
+      {/* 업로드 실패 오버레이 */}
+      {uploadError && !isUploading && (
+        <div
+          style={{
+            position: "absolute",
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            zIndex: 50,
+            backgroundColor: "rgba(255, 255, 255, 0.95)",
+            borderRadius: "12px",
+            display: "flex",
+            flexDirection: "column",
+            justifyContent: "center",
+            alignItems: "center",
+            gap: "12px",
+            backdropFilter: "blur(4px)",
+          }}
+        >
+          <div style={{ fontSize: "2rem" }}>⚠️</div>
+          <div style={{ fontWeight: "bold", color: "#dc2626", fontSize: "14px" }}>
+            이력서 업로드에 실패했습니다
+          </div>
+          <div style={{ color: "#6b7280", fontSize: "12px" }}>
+            파일을 다시 업로드하거나 재시도해 주세요.
+          </div>
+          <button
+            onClick={onRetry}
+            style={{
+              marginTop: "4px",
+              padding: "8px 20px",
+              backgroundColor: "#111827",
+              color: "#ffffff",
+              border: "none",
+              borderRadius: "8px",
+              fontSize: "13px",
+              fontWeight: "bold",
+              cursor: "pointer",
+            }}
+          >
+            재시도
+          </button>
+        </div>
+      )}
+
       {/* 업로드 중 오버레이 */}
       {isUploading && (
         <div
@@ -75,7 +126,7 @@ export default function DragDropWrapper({
             이력서 분석 중...
           </div>
           <div style={{ color: "#6b7280", fontSize: "12px" }}>
-            AI가 이력서를 읽고 있습니다. 잠시만 기다려주세요.
+            {SERVICE_NAME}이 이력서를 읽고 있습니다. 잠시만 기다려주세요.
           </div>
         </div>
       )}

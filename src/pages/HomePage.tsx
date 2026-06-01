@@ -87,26 +87,30 @@ const HomePage = () => {
 const TopNav = styled.nav`
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--space-4, 4px);
   padding: 0 2rem;
-  border-bottom: 1px solid #eee;
-  background: #fff;
+  border-bottom: 1px solid var(--color-border-muted, #e6e8ea);
+  background: var(--color-bg-primary, #ffffff);
 `;
 
 const NavTab = styled.button<{ $active?: boolean }>`
   padding: 14px 20px;
-  font-size: 14px;
-  font-weight: ${({ $active }) => ($active ? 600 : 400)};
-  color: ${({ $active }) => ($active ? "#1a1a1a" : "#878a92")};
+  font-size: var(--font-size-label-md, 14px);
+  font-weight: ${({ $active }) =>
+    $active ? "var(--font-weight-semibold, 600)" : "var(--font-weight-regular, 400)"};
+  color: ${({ $active }) =>
+    $active ? "var(--color-text-emphasis, #181a1b)" : "var(--color-text-tertiary, #878a92)"};
   background: none;
   border: none;
-  border-bottom: 2px solid ${({ $active }) => ($active ? "#1a1a1a" : "transparent")};
+  border-bottom: 2px solid
+    ${({ $active }) =>
+      $active ? "var(--color-text-emphasis, #181a1b)" : "transparent"};
   cursor: pointer;
   margin-bottom: -1px;
   transition: color 0.15s, border-color 0.15s;
 
   &:hover {
-    color: #1a1a1a;
+    color: var(--color-text-emphasis, #181a1b);
   }
 `;
 

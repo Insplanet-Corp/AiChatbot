@@ -9,6 +9,7 @@ import Icon from "./common/Icon/Icon";
 import Text from "./common/text/Text";
 import AreaInput from "./common/Input/AreaInput";
 import Button from "./common/button/Button";
+import { Avatar } from "./common/avatar";
 import styled from "styled-components";
 import { motion } from "framer-motion";
 import { scrollbarStyle } from "./layouts";
@@ -161,7 +162,13 @@ const CandidateDetailPane = () => {
 
         <ContentArea>
           <ProfileCard>
-            <Avatar src={data.profileImage} alt={data.name} />
+            <Avatar
+              style="photo"
+              src={data.profileImage}
+              alt={data.name}
+              size={120}
+              seed={data.name}
+            />
             <Text variant="headingSm" weight="bold">
               {data.name}
             </Text>
@@ -336,11 +343,12 @@ const PaneWrapper = styled.aside`
   max-width: 640px;
   height: stretch;
   margin: 2rem;
-  background-color: #fff;
-  border: 1px solid #e5e7eb;
-  border-radius: 1rem;
+  background-color: var(--color-bg-primary, #ffffff);
+  border: 1px solid var(--color-border-muted, #e6e8ea);
+  border-radius: var(--radius-xl, 16px);
   display: flex;
   flex-direction: column;
+  box-shadow: var(--shadow-3);
 `;
 
 const SummaryTextWrapper = styled.div`
@@ -356,8 +364,8 @@ const Header = styled.div`
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 16px;
-  border-bottom: 1px solid #e5e7eb;
+  padding: var(--space-16, 16px);
+  border-bottom: 1px solid var(--color-border-muted, #e6e8ea);
 `;
 
 const ContentArea = styled.div`
@@ -375,28 +383,21 @@ const ContentArea = styled.div`
 
 const ProfileCard = styled.div`
   width: 280px;
-  background-color: #f7f5fb;
-  border-radius: 16px;
-  padding: 32px 20px;
+  background-color: var(--color-bg-surface-primary, #f9f9fa);
+  border-radius: var(--radius-xl, 16px);
+  border: 1px solid var(--color-border-muted, #e6e8ea);
+  padding: var(--space-24, 24px) var(--space-20, 20px);
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 10px;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.02);
+  gap: var(--space-8, 8px);
 
   @media (max-width: 1800px) {
     width: 100%;
-    padding: 24px 0;
+    padding: var(--space-16, 16px) 0;
   }
 `;
 
-const Avatar = styled.img`
-  width: 120px;
-  height: 120px;
-  border-radius: 50%;
-  object-fit: cover;
-  margin-bottom: 20px;
-`;
 
 const InfoBox = styled.div`
   width: 100%;
@@ -415,30 +416,31 @@ const InfoBox = styled.div`
 const InfoItem = styled.div`
   display: flex;
   align-items: center;
-  background-color: #fff;
-  padding: 10px 12px;
-  border-radius: 8px;
-  font-size: 13px;
-  color: #333;
-  gap: 8px;
+  background-color: var(--color-bg-primary, #ffffff);
+  border: 1px solid var(--color-border-muted, #e6e8ea);
+  padding: var(--space-8, 8px) var(--space-12, 12px);
+  border-radius: var(--radius-md, 8px);
+  font-size: var(--font-size-caption-md, 12px);
+  color: var(--color-text-secondary, #6d7178);
+  gap: var(--space-8, 8px);
 `;
 
 const DetailCard = styled.div`
   flex: 1;
-  background-color: #fff;
-  border-radius: 16px;
-  padding: 32px;
+  background-color: var(--color-bg-primary, #ffffff);
+  border-radius: var(--radius-xl, 16px);
+  border: 1px solid var(--color-border-muted, #e6e8ea);
+  padding: var(--space-24, 24px);
   display: flex;
   flex-direction: column;
-  gap: 40px;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.02);
+  gap: var(--space-32, 32px);
   overflow-y: auto;
 
   ${scrollbarStyle};
 
   @media (max-width: 1800px) {
-    padding: 24px;
-    gap: 32px;
+    padding: var(--space-16, 16px);
+    gap: var(--space-24, 24px);
   }
 `;
 
@@ -457,40 +459,41 @@ const AISummaryBox = styled.div`
 
 const ScoreBox = styled.div`
   width: 140px;
-  background-color: #fcfafc;
-  border: 1px solid #f0eef4;
-  border-radius: 12px;
-  padding: 16px;
+  background-color: var(--color-bg-surface-primary, #f9f9fa);
+  border: 1px solid var(--color-border-muted, #e6e8ea);
+  border-radius: var(--radius-lg, 12px);
+  padding: var(--space-16, 16px);
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-8, 8px);
+  flex-shrink: 0;
 `;
 
 const ScoreValue = styled.div`
   font-size: 28px;
-  font-weight: 800;
-  color: #111;
+  font-weight: var(--font-weight-bold, 700);
+  color: var(--color-text-emphasis, #181a1b);
 `;
 
 const ProgressBarWrapper = styled.div`
   width: 100%;
   height: 6px;
-  background-color: #e5e5e5;
-  border-radius: 3px;
+  background-color: var(--color-bg-surface-secondary, #e6e8ea);
+  border-radius: var(--radius-full, 999px);
   overflow: hidden;
 `;
 
 const ProgressBar = styled.div<{ $percent: number }>`
   width: ${(props) => props.$percent}%;
   height: 100%;
-  background-color: #7c3aed;
+  background-color: var(--color-text-brand-primary, #4949d4);
 `;
 
 const Row = styled.div`
   display: flex;
-  padding: 12px 0;
-  border-bottom: 1px solid #f4f4f4;
+  padding: var(--space-12, 12px) 0;
+  border-bottom: 1px solid var(--color-border-muted, #e6e8ea);
 
   &:last-child {
     border-bottom: none;
@@ -499,14 +502,14 @@ const Row = styled.div`
 
 const RowContent = styled.div`
   flex: 1;
-  font-size: 14px;
-  color: #222;
+  font-size: var(--font-size-label-md, 14px);
+  color: var(--color-text-primary, #3c3e44);
   text-align: right;
 
   span {
-    color: #666;
-    margin-left: 8px;
-    font-size: 13px;
+    color: var(--color-text-tertiary, #878a92);
+    margin-left: var(--space-8, 8px);
+    font-size: var(--font-size-caption-md, 12px);
   }
 `;
 
@@ -514,47 +517,49 @@ const TagList = styled.div`
   flex: 1;
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: var(--space-8, 8px);
   justify-content: flex-end;
 `;
 
 const Tag = styled.span`
-  background-color: #f4f4f6;
-  color: #444;
-  padding: 4px 10px;
-  border-radius: 4px;
-  font-size: 12px;
+  background-color: var(--color-bg-secondary, #f1f2f4);
+  color: var(--color-text-secondary, #6d7178);
+  padding: 3px var(--space-8, 8px);
+  border-radius: var(--radius-xs, 4px);
+  font-size: var(--font-size-caption-md, 12px);
+  font-weight: var(--font-weight-medium, 500);
 `;
 
 const CommentContainer = styled.div`
   display: flex;
   flex-direction: column;
-  gap: 24px;
-  background-color: #faf9fb;
-  padding: 20px;
-  border-radius: 12px;
+  gap: var(--space-16, 16px);
+  background-color: var(--color-bg-surface-primary, #f9f9fa);
+  padding: var(--space-16, 16px);
+  border-radius: var(--radius-lg, 12px);
+  border: 1px solid var(--color-border-muted, #e6e8ea);
 `;
 
 const CommentInputWrapper = styled.div`
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: var(--space-12, 12px);
 `;
 
 const CommentList = styled.div`
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: var(--space-12, 12px);
 `;
 
 const CommentItem = styled.div`
-  background-color: #ffffff;
-  padding: 16px;
-  border-radius: 8px;
-  border: 1px solid #f3f4f6;
+  background-color: var(--color-bg-primary, #ffffff);
+  padding: var(--space-12, 12px) var(--space-16, 16px);
+  border-radius: var(--radius-md, 8px);
+  border: 1px solid var(--color-border-muted, #e6e8ea);
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--space-4, 4px);
 `;
 
 const CommentHeader = styled.div`

@@ -7,9 +7,6 @@ import { ContentInner, FixedTop, Main, ScrollBody } from "../components/layouts"
 import Text from "../components/common/text/Text";
 import Spacer from "../components/Spacer";
 
-const PLACEHOLDER_IMAGE =
-  "https://cdn.pixabay.com/photo/2015/10/05/22/37/blank-profile-picture-973460_1280.png";
-
 const safeDecryptName = (raw: string, fallback: string): string => {
   try {
     const result = decryptJSON<string>(raw);
@@ -73,7 +70,7 @@ const mapRowToCardData = (row: any) => {
   return {
     id: row.id,
     name,
-    profile_image: rd?.personal_info?.profile_image_url || PLACEHOLDER_IMAGE,
+    profile_image: rd?.personal_info?.profile_image_url || null,
     introduction,
     is_kosa_verified: false,
     basic_info: {
@@ -104,13 +101,13 @@ const CandidatesPage = () => {
       <FixedTop>
         <TopNav>
           <NavTab
-            active={location.pathname.startsWith("/chat")}
+            $active={location.pathname.startsWith("/chat")}
             onClick={() => navigate("/chat")}
           >
             인력 찾기
           </NavTab>
           <NavTab
-            active={location.pathname.startsWith("/candidates")}
+            $active={location.pathname.startsWith("/candidates")}
             onClick={() => navigate("/candidates")}
           >
             인력 프로필
@@ -121,7 +118,7 @@ const CandidatesPage = () => {
             <Text variant="headingSm" weight="bold" as="h2">
               인력 프로필
             </Text>
-            <Text variant="bodyMd" color="#878a92">
+            <Text variant="bodyMd" color="var(--color-text-tertiary)">
               총 {candidates.length}명
             </Text>
           </HeaderRow>
@@ -134,19 +131,19 @@ const CandidatesPage = () => {
 
           {isLoading && (
             <EmptyState>
-              <Text variant="bodyMd" color="#878a92">불러오는 중...</Text>
+              <Text variant="bodyMd" color="var(--color-text-muted)">불러오는 중...</Text>
             </EmptyState>
           )}
 
           {isError && (
             <EmptyState>
-              <Text variant="bodyMd" color="#e53e3e">데이터를 불러오지 못했습니다.</Text>
+              <Text variant="bodyMd" color="var(--color-text-status-negative)">데이터를 불러오지 못했습니다.</Text>
             </EmptyState>
           )}
 
           {!isLoading && !isError && candidates.length === 0 && (
             <EmptyState>
-              <Text variant="bodyMd" color="#878a92">등록된 인력 프로필이 없습니다.</Text>
+              <Text variant="bodyMd" color="var(--color-text-muted)">등록된 인력 프로필이 없습니다.</Text>
             </EmptyState>
           )}
 
@@ -172,26 +169,26 @@ const CandidatesPage = () => {
 const TopNav = styled.nav`
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--space-4, 4px);
   padding: 0 2rem;
-  border-bottom: 1px solid #eee;
-  background: #fff;
+  border-bottom: 1px solid var(--color-border-muted, #e6e8ea);
+  background: var(--color-bg-primary, #ffffff);
 `;
 
-const NavTab = styled.button<{ active?: boolean }>`
+const NavTab = styled.button<{ $active?: boolean }>`
   padding: 14px 20px;
-  font-size: 14px;
-  font-weight: ${({ active }) => (active ? 600 : 400)};
-  color: ${({ active }) => (active ? "#1a1a1a" : "#878a92")};
+  font-size: var(--font-size-label-md, 14px);
+  font-weight: ${({ $active }) => ($active ? "var(--font-weight-semibold, 600)" : "var(--font-weight-regular, 400)")};
+  color: ${({ $active }) => ($active ? "var(--color-text-emphasis, #181a1b)" : "var(--color-text-tertiary, #878a92)")};
   background: none;
   border: none;
-  border-bottom: 2px solid ${({ active }) => (active ? "#1a1a1a" : "transparent")};
+  border-bottom: 2px solid ${({ $active }) => ($active ? "var(--color-text-emphasis, #181a1b)" : "transparent")};
   cursor: pointer;
   margin-bottom: -1px;
   transition: color 0.15s, border-color 0.15s;
 
   &:hover {
-    color: #1a1a1a;
+    color: var(--color-text-emphasis, #181a1b);
   }
 `;
 
@@ -199,8 +196,8 @@ const HeaderRow = styled.div`
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 16px 0;
-  border-bottom: 1px solid #f0f0f0;
+  padding: var(--space-16, 16px) 0;
+  border-bottom: 1px solid var(--color-border-muted, #e6e8ea);
 `;
 
 const CardGrid = styled.div`

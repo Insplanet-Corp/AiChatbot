@@ -9,6 +9,8 @@ interface Props {
   onKeyDown: (e: React.KeyboardEvent<HTMLFormElement>) => void;
   onFileDrop: (file: File) => void;
   isUploading?: boolean;
+  uploadError?: boolean;
+  onRetry?: () => void;
 }
 
 const PromptInput = ({
@@ -18,9 +20,11 @@ const PromptInput = ({
   onKeyDown,
   onFileDrop,
   isUploading = false,
+  uploadError = false,
+  onRetry,
 }: Props) => {
   return (
-    <DragDropWrapper onFileDrop={onFileDrop} isUploading={isUploading}>
+    <DragDropWrapper onFileDrop={onFileDrop} isUploading={isUploading} uploadError={uploadError} onRetry={onRetry}>
       <form className="promptInput" onSubmit={onSubmit} onKeyDown={onKeyDown}>
         <PromptInputTextarea value={value} setMessage={setPrompt} />
         <Row justify="space-between">

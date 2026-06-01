@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import styled from "styled-components";
+import { SERVICE_NAME } from "../constants/service";
 import { supabase } from "../utils/supabase";
 import { decryptJSON, encryptJSON } from "../utils/encrypt";
 
@@ -65,7 +66,7 @@ const PasswordPage = () => {
   return (
     <Container>
       <Card>
-        <Title>RING CHAT</Title>
+        <Title>{SERVICE_NAME}</Title>
         <Subtitle>서비스에 접근하려면 비밀번호를 입력해주세요.</Subtitle>
 
         <Form onSubmit={handleSubmit}>
