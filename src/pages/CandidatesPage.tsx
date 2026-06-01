@@ -8,6 +8,7 @@ import Text from "../components/common/text/Text";
 import Spacer from "../components/Spacer";
 import { mapRowToCardData } from "../services/candidateService";
 import { JOB_CATEGORIES } from "../constants/service";
+import { useFavorites } from "../hooks/useFavorites";
 
 const ALL_CATEGORY = "전체";
 const CATEGORY_TABS = [ALL_CATEGORY, ...JOB_CATEGORIES];
@@ -18,18 +19,22 @@ const CandidatesPage = () => {
   const { data: rows = [], isLoading, isError } = useCandidateList();
   const candidates = useMemo(() => rows.map(mapRowToCardData), [rows]);
 
+  const { favorites, toggle: toggleFavorite, isFavorite } = useFavorites();
+
   const [selectedCategory, setSelectedCategory] = useState(ALL_CATEGORY);
   const [financeOnly, setFinanceOnly] = useState(false);
   const [itCertOnly, setItCertOnly] = useState(false);
+  const [favoritesOnly, setFavoritesOnly] = useState(false);
 
   const filtered = useMemo(() => {
     return candidates.filter((c) => {
       if (selectedCategory !== ALL_CATEGORY && c.basic_info.category !== selectedCategory) return false;
       if (financeOnly && !c.flags.has_finance_experience) return false;
       if (itCertOnly && !c.flags.has_it_certificate) return false;
+      if (favoritesOnly && !favorites.has(c.id)) return false;
       return true;
     });
-  }, [candidates, selectedCategory, financeOnly, itCertOnly]);
+  }, [candidates, selectedCategory, financeOnly, itCertOnly, favoritesOnly, favorites]);
 
   return (
     <Main>
@@ -58,6 +63,18 @@ const CandidatesPage = () => {
             </CategoryTabs>
 
             <Toggles>
+              <ToggleLabel>
+                <Switch
+                  type="checkbox"
+                  checked={favoritesOnly}
+                  onChange={(e) => setFavoritesOnly(e.target.checked)}
+                />
+                <ToggleTrack $on={favoritesOnly} $color="#f5a623">
+                  <ToggleThumb $on={favoritesOnly} />
+                </ToggleTrack>
+                <span>★ 즐겨찾기</span>
+              </ToggleLabel>
+
               <ToggleLabel>
                 <Switch
                   type="checkbox"
@@ -120,6 +137,8 @@ const CandidatesPage = () => {
                 key={candidate.id}
                 data={candidate}
                 onClick={() => navigate(`candidate/${candidate.id}`)}
+                isFavorite={isFavorite(candidate.id)}
+                onToggleFavorite={toggleFavorite}
               />
             ))}
           </CardGrid>
@@ -208,13 +227,13 @@ const ToggleLabel = styled.label`
   }
 `;
 
-const ToggleTrack = styled.span<{ $on: boolean }>`
+const ToggleTrack = styled.span<{ $on: boolean; $color?: string }>`
   position: relative;
   display: inline-block;
   width: 36px;
   height: 20px;
   border-radius: var(--radius-full, 999px);
-  background: ${({ $on }) => ($on ? "var(--color-bg-solid-brand, #4949d4)" : "var(--color-bg-surface-secondary, #e6e8ea)")};
+  background: ${({ $on, $color }) => ($on ? ($color ?? "var(--color-bg-solid-brand, #4949d4)") : "var(--color-bg-surface-secondary, #e6e8ea)")};
   transition: background 0.2s;
   flex-shrink: 0;
 `;

@@ -1,3 +1,4 @@
+import React from "react";
 import styled from "styled-components";
 import Text from "./common/text/Text";
 import Icon from "./common/Icon/Icon";
@@ -10,11 +11,16 @@ const renderStars = (rating) => {
   return fullStars + emptyStars;
 };
 
-const CandidateCard = ({ data, onClick }) => {
+const CandidateCard = ({ data, onClick, isFavorite = false, onToggleFavorite }) => {
   if (!data || !data.basic_info) return null;
 
   const currentYear = 2026;
   const age = currentYear - data.basic_info.birth_year;
+
+  const handleStarClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    onToggleFavorite?.(data.id);
+  };
 
   return (
     <Card onClick={onClick}>
@@ -45,7 +51,9 @@ const CandidateCard = ({ data, onClick }) => {
           </MetaInfo>
         </UserInfo>
 
-        <Icon name="Star" color="var(--color-icon-tertiary, #878a92)" />
+        <StarButton onClick={handleStarClick} $active={isFavorite} title={isFavorite ? "즐겨찾기 해제" : "즐겨찾기 추가"}>
+          <Icon name="Star" color={isFavorite ? "#f5a623" : "var(--color-icon-tertiary, #878a92)"} />
+        </StarButton>
       </Header>
 
       <Divider />
@@ -129,6 +137,27 @@ const Header = styled.div`
   align-items: flex-start;
   gap: var(--space-12, 12px);
   margin-bottom: var(--space-16, 16px);
+`;
+
+const StarButton = styled.button<{ $active: boolean }>`
+  background: none;
+  border: none;
+  padding: 2px;
+  cursor: pointer;
+  border-radius: var(--radius-sm, 6px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: transform 0.15s;
+
+  &:hover {
+    transform: scale(1.2);
+  }
+
+  &:active {
+    transform: scale(0.95);
+  }
 `;
 
 

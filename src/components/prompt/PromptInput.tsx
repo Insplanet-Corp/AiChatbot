@@ -1,6 +1,12 @@
 import { ArrowBigUp, Plus } from "lucide-react";
 import Row from "../Row";
 import DragDropWrapper from "../DragDropWrapper";
+import styled from "styled-components";
+
+interface SuggestionItem {
+  label: string;
+  value: string;
+}
 
 interface Props {
   value: string;
@@ -11,6 +17,8 @@ interface Props {
   isUploading?: boolean;
   uploadError?: boolean;
   onRetry?: () => void;
+  suggestions?: SuggestionItem[];
+  onSuggestionClick?: (value: string) => void;
 }
 
 const PromptInput = ({
@@ -22,9 +30,20 @@ const PromptInput = ({
   isUploading = false,
   uploadError = false,
   onRetry,
+  suggestions,
+  onSuggestionClick,
 }: Props) => {
   return (
     <DragDropWrapper onFileDrop={onFileDrop} isUploading={isUploading} uploadError={uploadError} onRetry={onRetry}>
+      {suggestions && suggestions.length > 0 && (
+        <SuggestionRow>
+          {suggestions.map((s) => (
+            <SuggestionChip key={s.value} type="button" onClick={() => onSuggestionClick?.(s.value)}>
+              {s.label}
+            </SuggestionChip>
+          ))}
+        </SuggestionRow>
+      )}
       <form className="promptInput" onSubmit={onSubmit} onKeyDown={onKeyDown}>
         <PromptInputTextarea value={value} setMessage={setPrompt} />
         <Row justify="space-between">
@@ -70,5 +89,30 @@ const PromptSubmitButton = () => {
     </button>
   );
 };
+
+const SuggestionRow = styled.div`
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 0 0 10px;
+`;
+
+const SuggestionChip = styled.button`
+  padding: 6px 14px;
+  border-radius: 999px;
+  border: 1px solid var(--color-border-muted, #e6e8ea);
+  background: var(--color-bg-primary, #ffffff);
+  color: var(--color-text-secondary, #4b4f57);
+  font-size: var(--font-size-label-sm, 13px);
+  font-weight: var(--font-weight-medium, 500);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s, border-color 0.15s;
+
+  &:hover {
+    background: var(--color-interaction-hover, rgba(24, 26, 27, 0.06));
+    border-color: var(--color-border-strong, #c2c5cc);
+  }
+`;
 
 export default PromptInput;

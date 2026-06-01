@@ -106,7 +106,11 @@ export const mapRowToCardData = (row: any): CandidateCardData => {
   return {
     id: row.id,
     name,
-    profile_image: rd?.personal_info?.profile_image_url || null,
+    profile_image: (() => {
+      const url = rd?.personal_info?.profile_image_url;
+      if (!url || url.includes("flaticon.com")) return null;
+      return url;
+    })(),
     introduction,
     is_kosa_verified: false,
     basic_info: {
@@ -171,7 +175,11 @@ const fetchAndDecryptCandidate = async (id: string) => {
     phone: rd?.personal_info?.phone || "연락처 없음",
     email: rd?.personal_info?.email || "이메일 없음",
     address: rd?.personal_info?.address || "주소 미상",
-    profileImage: rd?.personal_info?.profile_image_url || null,
+    profileImage: (() => {
+      const url = rd?.personal_info?.profile_image_url;
+      if (!url || url.includes("flaticon.com")) return null;
+      return url;
+    })(),
 
     aiSummary:
       rd?.evaluation?.one_line_review ||

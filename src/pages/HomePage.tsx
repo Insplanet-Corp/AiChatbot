@@ -42,12 +42,10 @@ const HomePage = () => {
       <CenterContent>
         <TitleBlock>
           <Text variant="headingLg" weight="bold">
-            어떤 인재를 찾으시나요?
+            딱 맞는 인재, 지금 바로 찾아보세요
           </Text>
-          <Spacer size={8} />
           <Text variant="bodyMd" color="var(--color-text-secondary, #6d7178)">
-            {SERVICE_NAME}이 수천 명의 전문가 중 당신의 팀에 가장 완벽한 인재를 단 몇 초 만에
-            제안해 드립니다.
+            사내 인재 풀에서 조건에 맞는 적임자를 빠르게 찾아드립니다.
           </Text>
         </TitleBlock>
         <PromptInput
@@ -81,6 +79,9 @@ const CenterContent = styled.div`
 `;
 
 const TitleBlock = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
   text-align: center;
   margin-bottom: 48px;
 
