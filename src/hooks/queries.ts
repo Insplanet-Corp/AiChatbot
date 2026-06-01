@@ -1,4 +1,4 @@
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { nanoid } from "nanoid";
 import {
   startConversation,
@@ -6,6 +6,7 @@ import {
 } from "../apis/conversation";
 import { postChat } from "../services/chatService";
 import { parseAndSaveResume } from "../services/resumeService";
+import { supabase } from "../utils/supabase";
 
 interface Message {
   id: string;
@@ -162,9 +163,25 @@ const useResumeUpload = (roomID?: string) => {
   });
 };
 
+const useCandidateList = () => {
+  return useQuery({
+    queryKey: ["candidates"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("resumes")
+        .select("id, name, total_experience_months, rating, resume_data, created_at")
+        .order("created_at", { ascending: false });
+
+      if (error) throw new Error(error.message);
+      return data || [];
+    },
+  });
+};
+
 export {
   useStartConversation,
   useConversationMessage,
   useConversationResponse,
   useResumeUpload,
+  useCandidateList,
 };

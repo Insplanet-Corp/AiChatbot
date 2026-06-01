@@ -30,6 +30,7 @@ const ChatLayout = () => {
         <Spacer size={4} />
 
         <MenuItem onClick={() => navigate(`/chat`)}>새로운 채팅</MenuItem>
+        <MenuItem onClick={() => navigate(`/candidates`)}>인력 프로필</MenuItem>
 
         <ConversationList />
 
