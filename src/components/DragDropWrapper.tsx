@@ -1,4 +1,4 @@
-import { useState, DragEvent, ReactNode } from "react";
+import { useState, DragEvent, ReactNode, useRef } from "react";
 import { SERVICE_NAME } from "../constants/service";
 
 interface DragDropWrapperProps {
@@ -19,6 +19,15 @@ export default function DragDropWrapper({
   uploadProgress,
 }: DragDropWrapperProps) {
   const [isDragging, setIsDragging] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleNewFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files.length > 0) {
+      const files = Array.from(e.target.files).slice(0, 10);
+      onFileDrop(files);
+      e.target.value = "";
+    }
+  };
 
   const handleDragEnter = (e: DragEvent<HTMLDivElement>) => {
     e.preventDefault();
@@ -84,22 +93,46 @@ export default function DragDropWrapper({
           <div style={{ color: "#6b7280", fontSize: "12px" }}>
             파일을 다시 업로드하거나 재시도해 주세요.
           </div>
-          <button
-            onClick={onRetry}
-            style={{
-              marginTop: "4px",
-              padding: "8px 20px",
-              backgroundColor: "#111827",
-              color: "#ffffff",
-              border: "none",
-              borderRadius: "8px",
-              fontSize: "13px",
-              fontWeight: "bold",
-              cursor: "pointer",
-            }}
-          >
-            재시도
-          </button>
+          <div style={{ display: "flex", gap: "8px", marginTop: "4px" }}>
+            <button
+              onClick={onRetry}
+              style={{
+                padding: "8px 20px",
+                backgroundColor: "#111827",
+                color: "#ffffff",
+                border: "none",
+                borderRadius: "8px",
+                fontSize: "13px",
+                fontWeight: "bold",
+                cursor: "pointer",
+              }}
+            >
+              재시도
+            </button>
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              style={{
+                padding: "8px 20px",
+                backgroundColor: "#ffffff",
+                color: "#111827",
+                border: "1.5px solid #d1d5db",
+                borderRadius: "8px",
+                fontSize: "13px",
+                fontWeight: "bold",
+                cursor: "pointer",
+              }}
+            >
+              새 파일 업로드
+            </button>
+          </div>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".pdf,.doc,.docx,.txt,.hwp"
+            multiple
+            style={{ display: "none" }}
+            onChange={handleNewFileSelect}
+          />
         </div>
       )}
 
