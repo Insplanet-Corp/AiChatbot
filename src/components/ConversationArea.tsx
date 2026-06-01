@@ -1,6 +1,6 @@
-import { SyncLoader } from "react-spinners";
 import { AIChatBubble, MyChatBubble } from "./domain/ChatBubble";
 import { CandidateCard } from "./CandidateCard";
+import ThinkingProcess from "./ThinkingProcess";
 import { useNavigate } from "react-router-dom";
 import styled from "styled-components";
 
@@ -52,16 +52,7 @@ const ConversationArea = ({
         );
       })}
 
-      {isAITyping && (
-        <TypingIndicator>
-          <SyncLoader
-            color="var(--color-text-muted, #9b9fa6)"
-            loading
-            size={6}
-            speedMultiplier={0.6}
-          />
-        </TypingIndicator>
-      )}
+      {isAITyping && <ThinkingProcess />}
     </Wrapper>
   );
 };
@@ -99,8 +90,5 @@ const CandidateGrid = styled.div`
   }
 `;
 
-const TypingIndicator = styled.div`
-  padding: var(--space-8, 8px) 0;
-`;
 
 export default ConversationArea;
