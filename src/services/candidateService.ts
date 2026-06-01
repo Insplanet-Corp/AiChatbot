@@ -24,6 +24,10 @@ export interface CandidateCardData {
     skills: string[];
     internal_rating: number;
   };
+  flags: {
+    has_finance_experience: boolean;
+    has_it_certificate: boolean;
+  };
 }
 
 const safeDecryptName = (raw: string, fallback: string): string => {
@@ -84,6 +88,21 @@ export const mapRowToCardData = (row: any): CandidateCardData => {
   const introduction =
     rd?.evaluation?.one_line_review || rd?.professional_summary?.introduction || "";
 
+  const FINANCE_KEYWORDS = ["은행", "증권", "보험", "카드", "캐피탈", "저축", "금융", "투자", "자산", "신탁", "리스", "할부", "대출"];
+  const has_finance_experience = Array.isArray(rd?.work_experiences) &&
+    rd.work_experiences.some((w: any) =>
+      FINANCE_KEYWORDS.some((kw) =>
+        (w.company_name || "").includes(kw) ||
+        (w.job_title || "").includes(kw) ||
+        (w.department || "").includes(kw)
+      )
+    );
+
+  const IT_CERT_KEYWORDS = ["정보처리기능사", "정보처리산업기사", "정보처리기사"];
+  const has_it_certificate = qualifications.some((q) =>
+    IT_CERT_KEYWORDS.some((kw) => q.includes(kw))
+  );
+
   return {
     id: row.id,
     name,
@@ -101,6 +120,10 @@ export const mapRowToCardData = (row: any): CandidateCardData => {
       major_experience: majorExperience,
       skills,
       internal_rating: row.rating || 0,
+    },
+    flags: {
+      has_finance_experience,
+      has_it_certificate,
     },
   };
 };
