@@ -4,8 +4,7 @@ import {
   CHAT_TYPE_MESSAGES,
   CHAT_WITH_SUPABASE_MESSAGES,
 } from "../constants/chatPrompt";
-import { askGemini } from "../apis/gemini";
-import { mapRowToCardData } from "./candidateService";
+import { mapRowToCardData, CandidateCardData } from "./candidateService";
 
 export interface PostChatParams {
   id: string;
@@ -20,16 +19,19 @@ export interface ChatResponse {
 
 type ChatIntent = "search" | "chat";
 
+// 카드 데이터 + LLM 평가에 필요한 원본 경력/프로젝트
+type MinimalCandidate = CandidateCardData & {
+  work_experiences: any[];
+  projects: any[];
+};
+
 const postChat = async (params: PostChatParams): Promise<ChatResponse> => {
   try {
     const intentType = await postChatToType(params);
     if (intentType === "search") {
-      console.log("search");
       return await postChatWithSupabase(params);
-    } else {
-      console.log("chat");
-      return { text: "사용자 검색만 부탁드립니다." };
     }
+    return { text: "사용자 검색만 부탁드립니다." };
   } catch (error) {
     console.error("postChat Error:", error);
     throw new Error("대화 처리 중 오류가 발생했습니다.");
@@ -46,16 +48,65 @@ const postChatToType = async ({
       false,
       { format: "json" },
     );
-    console.log(content);
     try {
       const parsedData = JSON.parse(content);
       return parsedData.type === "search" ? "search" : "chat";
-    } catch (error) {
+    } catch {
       return "chat";
     }
   } catch (error) {
     console.error("라우터 통신 에러:", error);
     return "chat";
+  }
+};
+
+// 후보자 1명을 LLM 으로 평가해 카드 + 사유(reason) 를 붙여 반환.
+// 파싱/통신 오류가 나도 throw 하지 않고 안전한 fallback 카드를 돌려준다.
+const evaluateCandidate = async (candidate: MinimalCandidate, message: string) => {
+  const { work_experiences, projects, ...cardData } = candidate;
+
+  try {
+    const candidateForLLM = {
+      introduction: candidate.introduction,
+      skills: candidate.details.skills,
+      work_experiences,
+      projects,
+    };
+
+    const resultText = await askOllama(
+      import.meta.env.VITE_LLAMA_TEXT_MODEL,
+      CHAT_WITH_SUPABASE_MESSAGES(message, JSON.stringify(candidateForLLM)),
+      true,
+      {
+        num_ctx: 8192,
+        temperature: 0.1,
+        stop: ["<|endoftext|>", "<|im_start|>", "<|im_end|>", "Question:"],
+        format: "json",
+      },
+    );
+
+    let parsed = JSON.parse(resultText);
+    parsed = Array.isArray(parsed) ? parsed[0] : parsed;
+
+    return {
+      ...cardData,
+      details: {
+        ...cardData.details,
+        major_experience: parsed.major_experience || "관련 경험 없음",
+        skills: parsed.skills || cardData.details.skills,
+      },
+      reason: parsed.reason || "조건에 부합하는 인재입니다.",
+    };
+  } catch (err) {
+    console.error(`[${candidate.name}] 평가 중 AI 파싱 오류 발생 :`, err);
+    return {
+      ...cardData,
+      reason: "AI 분석 중 오류가 발생하여 사유를 생성하지 못했습니다.",
+      details: {
+        ...cardData.details,
+        major_experience: "확인 불가",
+      },
+    };
   }
 };
 
@@ -78,83 +129,20 @@ const postChatWithSupabase = async ({
       return { text: "검색 조건에 맞는 인재가 없습니다." };
     }
 
-    console.log("matchedCandidates : ", matchedCandidates);
-
-    const minimalCandidates = matchedCandidates.map((c: any) => {
-      const card = mapRowToCardData(c);
-      return {
-        ...card,
+    const minimalCandidates: MinimalCandidate[] = matchedCandidates.map(
+      (c: any) => ({
+        ...mapRowToCardData(c),
         work_experiences: c.work_experiences || [],
         projects: c.projects || [],
-      };
-    });
+      }),
+    );
 
-    console.log("복호화 :", minimalCandidates);
+    // 후보자별 LLM 평가를 병렬 처리 (결과 순서는 입력 순서와 동일하게 유지됨)
+    const evaluatedCandidates = await Promise.all(
+      minimalCandidates.map((candidate) => evaluateCandidate(candidate, message)),
+    );
 
-    const evaluatedCandidates = [];
-    for (const candidate of minimalCandidates) {
-      try {
-        console.log(`[${candidate.name}] AI 분석 시작...`);
-
-        const candidateForLLM = {
-          introduction: candidate.introduction,
-          skills: candidate.details.skills,
-          work_experiences: candidate.work_experiences,
-          projects: candidate.projects,
-        };
-
-        const singleCandidateJson = JSON.stringify(candidateForLLM);
-
-        console.log(singleCandidateJson);
-
-        const resultText = await askOllama(
-          import.meta.env.VITE_LLAMA_TEXT_MODEL,
-          CHAT_WITH_SUPABASE_MESSAGES(message, singleCandidateJson),
-          true,
-          {
-            num_ctx: 8192,
-            temperature: 0.1,
-            stop: ["<|endoftext|>", "<|im_start|>", "<|im_end|>", "Question:"],
-            format: "json",
-          },
-        );
-
-        console.log(`[${candidate.name}] AI 응답:`, resultText);
-
-        let parsedData = JSON.parse(resultText);
-        parsedData = Array.isArray(parsedData) ? parsedData[0] : parsedData;
-
-        const { work_experiences: _we, projects: _p, ...cardData } = candidate;
-        evaluatedCandidates.push({
-          ...cardData,
-          details: {
-            ...cardData.details,
-            major_experience: parsedData.major_experience || "관련 경험 없음",
-            skills: parsedData.skills || cardData.details.skills,
-          },
-          reason: parsedData.reason || "조건에 부합하는 인재입니다.",
-        });
-
-        console.log(evaluatedCandidates);
-      } catch (err) {
-        console.error(`[${candidate.name}] 평가 중 AI 파싱 오류 발생 :`, err);
-
-        const { work_experiences: _we2, projects: _p2, ...cardDataErr } = candidate;
-        evaluatedCandidates.push({
-          ...cardDataErr,
-          reason: "AI 분석 중 오류가 발생하여 사유를 생성하지 못했습니다.",
-          details: {
-            ...cardDataErr.details,
-            major_experience: "확인 불가",
-          },
-        });
-      }
-    }
-
-    const finalResultString = JSON.stringify(evaluatedCandidates);
-    console.log("최종 합쳐진 AI 평가 결과:", finalResultString);
-
-    return { text: finalResultString };
+    return { text: JSON.stringify(evaluatedCandidates) };
   } catch (error) {
     console.error("AI Vector Search error:", error);
     throw new Error("AI 처리 및 벡터 검색 중 오류가 발생했습니다.");

@@ -63,41 +63,9 @@ const CandidatesPage = () => {
             </CategoryTabs>
 
             <Toggles>
-              <ToggleLabel>
-                <Switch
-                  type="checkbox"
-                  checked={favoritesOnly}
-                  onChange={(e) => setFavoritesOnly(e.target.checked)}
-                />
-                <ToggleTrack $on={favoritesOnly} $color="#f5a623">
-                  <ToggleThumb $on={favoritesOnly} />
-                </ToggleTrack>
-                <span>★ 즐겨찾기</span>
-              </ToggleLabel>
-
-              <ToggleLabel>
-                <Switch
-                  type="checkbox"
-                  checked={financeOnly}
-                  onChange={(e) => setFinanceOnly(e.target.checked)}
-                />
-                <ToggleTrack $on={financeOnly}>
-                  <ToggleThumb $on={financeOnly} />
-                </ToggleTrack>
-                <span>금융권 경력</span>
-              </ToggleLabel>
-
-              <ToggleLabel>
-                <Switch
-                  type="checkbox"
-                  checked={itCertOnly}
-                  onChange={(e) => setItCertOnly(e.target.checked)}
-                />
-                <ToggleTrack $on={itCertOnly}>
-                  <ToggleThumb $on={itCertOnly} />
-                </ToggleTrack>
-                <span>정보처리기능사</span>
-              </ToggleLabel>
+              <FilterToggle checked={favoritesOnly} onChange={setFavoritesOnly} label="즐겨찾기" />
+              <FilterToggle checked={financeOnly} onChange={setFinanceOnly} label="금융권 경력" />
+              <FilterToggle checked={itCertOnly} onChange={setItCertOnly} label="정보처리기능사" />
             </Toggles>
           </FilterBar>
         </ContentInner>
@@ -105,7 +73,7 @@ const CandidatesPage = () => {
 
       <ScrollBody>
         <ContentInner size="wide">
-          <Spacer size={24} />
+          <Spacer size={6} />
 
           {isLoading && (
             <EmptyState>
@@ -151,6 +119,23 @@ const CandidatesPage = () => {
     </Main>
   );
 };
+
+interface FilterToggleProps {
+  checked: boolean;
+  onChange: (value: boolean) => void;
+  label: string;
+  color?: string;
+}
+
+const FilterToggle = ({ checked, onChange, label, color }: FilterToggleProps) => (
+  <ToggleLabel>
+    <Switch type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} />
+    <ToggleTrack $on={checked} $color={color}>
+      <ToggleThumb $on={checked} />
+    </ToggleTrack>
+    <span>{label}</span>
+  </ToggleLabel>
+);
 
 const HeaderRow = styled.div`
   display: flex;

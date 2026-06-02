@@ -1,9 +1,8 @@
 import { Main } from "../components/layouts";
-import Spacer from "../components/Spacer";
 import Text from "../components/common/text/Text";
 import PromptInput from "../components/prompt/PromptInput";
 import styled from "styled-components";
-import { SERVICE_NAME } from "../constants/service";
+import { CHAT_SUGGESTIONS } from "../constants/service";
 
 import {
   useStartConversation,
@@ -16,26 +15,24 @@ import { useChatSubmit } from "../hooks/useChatSubmit";
 
 const HomePage = () => {
   const user = getUser();
-
-  if (!user) {
-    alert("test :: user로 로그인 후 이용 가능합니다.");
-    return null;
-  }
-
   const conversation = useStartConversation();
   const message = useConversationMessage();
   const response = useConversationResponse(message.mutate);
   const resumeUpload = useResumeUpload();
 
-  const { prompt, handleChange, handleKeyDown, handleSubmit, handleFileDrop, handleRetry } =
+  const { prompt, setPrompt, handleChange, handleKeyDown, handleSubmit, handleFileDrop, handleRetry } =
     useChatSubmit({
       roomID: undefined,
-      user,
+      user: user ?? { id: "" },
       conversation,
       message,
       response,
       resumeUpload,
     });
+
+  if (!user) {
+    return null;
+  }
 
   return (
     <HomeMain>
@@ -57,6 +54,8 @@ const HomePage = () => {
           isUploading={resumeUpload.isPending}
           uploadError={resumeUpload.isError}
           onRetry={handleRetry}
+          suggestions={CHAT_SUGGESTIONS}
+          onSuggestionClick={(val) => setPrompt(val)}
         />
       </CenterContent>
     </HomeMain>

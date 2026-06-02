@@ -13,6 +13,7 @@ import {
 import { useChatSubmit } from "../hooks/useChatSubmit";
 import { getUser } from "../utils/getUser";
 import { useConversation } from "../hooks/useConversation";
+import { CHAT_SUGGESTIONS } from "../constants/service";
 
 const ConversationPage = () => {
   const user = getUser();
@@ -23,11 +24,6 @@ const ConversationPage = () => {
   const message = useConversationMessage();
   const response = useConversationResponse(message.mutate);
   const resumeUpload = useResumeUpload(roomID);
-
-  const SUGGESTIONS = [
-    { label: "금융권 경험있는 기획자", value: "금융권 경험이 있는 기획자를 찾아주세요." },
-    { label: "리액트 경험있는 퍼블리셔", value: "React 경험이 있는 퍼블리셔를 찾아주세요." },
-  ];
 
   const { prompt, setPrompt, handleChange, handleKeyDown, handleSubmit, handleFileDrop, handleRetry, uploadProgress } =
     useChatSubmit({
@@ -70,7 +66,7 @@ const ConversationPage = () => {
             uploadError={resumeUpload.isError}
             uploadProgress={uploadProgress}
             onRetry={handleRetry}
-            suggestions={!roomID ? SUGGESTIONS : undefined}
+            suggestions={!roomID ? CHAT_SUGGESTIONS : undefined}
             onSuggestionClick={(val) => setPrompt(val)}
           />
         </FixedBottom>

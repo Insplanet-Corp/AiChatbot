@@ -5,7 +5,7 @@ import ConversationPage from "./pages/ConversationPage.js";
 import PasswordPage from "./pages/PasswordPage";
 import ChatLayout from "./components/ChatLayout";
 import { CandidateDetailPane } from "./components/CandidateDetailPane";
-import ProtectedRoute from "./utils/RotectedRoute";
+import ProtectedRoute from "./utils/ProtectedRoute";
 import HomePage from "./pages/HomePage";
 import CandidatesPage from "./pages/CandidatesPage";
 

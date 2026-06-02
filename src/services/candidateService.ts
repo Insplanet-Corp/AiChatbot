@@ -30,16 +30,12 @@ export interface CandidateCardData {
   };
 }
 
-const safeDecryptName = (raw: string, fallback: string): string => {
-  try {
-    const result = decryptJSON<string>(raw);
-    return typeof result === "string" ? result : fallback;
-  } catch {
-    return fallback;
-  }
-};
+// -------------------------------------------------------
+// 복호화 헬퍼 (mapRowToCardData / fetchAndDecryptCandidate 공용)
+// -------------------------------------------------------
 
-const safeDecryptResumeData = (raw: any): any => {
+// resume_data 복호화: 암호문(string / { encrypted }) 또는 평문 모두 처리
+const decryptResumeData = (raw: any): any => {
   try {
     if (typeof raw === "string") return decryptJSON(raw);
     if (raw?.encrypted) return decryptJSON(raw);
@@ -49,15 +45,44 @@ const safeDecryptResumeData = (raw: any): any => {
   }
 };
 
-export const mapRowToCardData = (row: any): CandidateCardData => {
-  const rd = safeDecryptResumeData(row.resume_data);
-  const name = safeDecryptName(row.name, rd?.personal_info?.name || "이름 없음");
+// 이름 복호화: 실패하거나 문자열이 아니면 fallback 사용
+const decryptName = (raw: string, fallback: string): string => {
+  try {
+    const result = decryptJSON<string>(raw);
+    return typeof result === "string" ? result : fallback;
+  } catch {
+    return fallback;
+  }
+};
 
-  const expLabel = formatExperience(row.total_experience_months);
+// row 1건을 복호화해 { rd, name } 으로 반환
+const decryptRow = (row: any): { rd: any; name: string } => {
+  const rd = decryptResumeData(row.resume_data);
+  const name = decryptName(row.name, rd?.personal_info?.name || "이름 없음");
+  return { rd, name };
+};
 
-  const birthYear = rd?.personal_info?.birth_date
+// 프로필 이미지 URL 정리 (flaticon placeholder 는 null 처리)
+const getProfileImage = (rd: any): string | null => {
+  const url = rd?.personal_info?.profile_image_url;
+  if (!url || url.includes("flaticon.com")) return null;
+  return url;
+};
+
+// birth_date("YYYY...") → 출생연도(number) | null
+const parseBirthYear = (rd: any): number | null =>
+  rd?.personal_info?.birth_date
     ? parseInt(rd.personal_info.birth_date.substring(0, 4))
     : null;
+
+const FINANCE_KEYWORDS = ["은행", "증권", "보험", "카드", "캐피탈", "저축", "금융", "투자", "자산", "신탁", "리스", "할부", "대출"];
+const IT_CERT_KEYWORDS = ["정보처리기능사", "정보처리산업기사", "정보처리기사"];
+
+export const mapRowToCardData = (row: any): CandidateCardData => {
+  const { rd, name } = decryptRow(row);
+
+  const expLabel = formatExperience(row.total_experience_months);
+  const birthYear = parseBirthYear(rd);
 
   const latestJob = Array.isArray(rd?.work_experiences) && rd.work_experiences[0];
   const category =
@@ -88,7 +113,6 @@ export const mapRowToCardData = (row: any): CandidateCardData => {
   const introduction =
     rd?.evaluation?.one_line_review || rd?.professional_summary?.introduction || "";
 
-  const FINANCE_KEYWORDS = ["은행", "증권", "보험", "카드", "캐피탈", "저축", "금융", "투자", "자산", "신탁", "리스", "할부", "대출"];
   const has_finance_experience = Array.isArray(rd?.work_experiences) &&
     rd.work_experiences.some((w: any) =>
       FINANCE_KEYWORDS.some((kw) =>
@@ -98,7 +122,6 @@ export const mapRowToCardData = (row: any): CandidateCardData => {
       )
     );
 
-  const IT_CERT_KEYWORDS = ["정보처리기능사", "정보처리산업기사", "정보처리기사"];
   const has_it_certificate = qualifications.some((q) =>
     IT_CERT_KEYWORDS.some((kw) => q.includes(kw))
   );
@@ -106,11 +129,7 @@ export const mapRowToCardData = (row: any): CandidateCardData => {
   return {
     id: row.id,
     name,
-    profile_image: (() => {
-      const url = rd?.personal_info?.profile_image_url;
-      if (!url || url.includes("flaticon.com")) return null;
-      return url;
-    })(),
+    profile_image: getProfileImage(rd),
     introduction,
     is_kosa_verified: false,
     basic_info: {
@@ -142,44 +161,19 @@ const fetchAndDecryptCandidate = async (id: string) => {
   if (error) throw new Error(error.message);
   if (!data) throw new Error("후보자 데이터를 찾을 수 없습니다.");
 
-  let decryptedResumeData: any = {};
-  try {
-    if (typeof data.resume_data === "string") {
-      decryptedResumeData = decryptJSON(data.resume_data);
-    } else if (data.resume_data && data.resume_data.encrypted) {
-      decryptedResumeData = decryptJSON(data.resume_data);
-    } else {
-      decryptedResumeData = data.resume_data || {};
-    }
-  } catch (err) {
-    console.error("복호화 실패:", err);
-    decryptedResumeData = data.resume_data || {};
-  }
-
-  let decryptedName = data.name;
-  try {
-    decryptedName = decryptJSON(data.name) || data.name;
-  } catch {
-    decryptedName =
-      decryptedResumeData?.personal_info?.name || data.name || "이름 없음";
-  }
-
-  const rd = decryptedResumeData;
+  const { rd, name } = decryptRow(data);
+  const months = data.total_experience_months || 0;
 
   return {
-    name: decryptedName,
-    experience: `경력 ${Math.floor((data.total_experience_months || 0) / 12)}년 ${(data.total_experience_months || 0) % 12}개월`,
+    name,
+    experience: `경력 ${Math.floor(months / 12)}년 ${months % 12}개월`,
     age: rd?.personal_info?.birth_date
       ? `만 ${new Date().getFullYear() - parseInt(rd.personal_info.birth_date.substring(0, 4))}세`
       : "나이 미상",
     phone: rd?.personal_info?.phone || "연락처 없음",
     email: rd?.personal_info?.email || "이메일 없음",
     address: rd?.personal_info?.address || "주소 미상",
-    profileImage: (() => {
-      const url = rd?.personal_info?.profile_image_url;
-      if (!url || url.includes("flaticon.com")) return null;
-      return url;
-    })(),
+    profileImage: getProfileImage(rd),
 
     aiSummary:
       rd?.evaluation?.one_line_review ||

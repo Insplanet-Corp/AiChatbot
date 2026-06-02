@@ -17,63 +17,6 @@ interface Message {
   created_at?: string;
 }
 
-// const useCreateChatRoom = ({ createRoom, insertMessage, chatAI }: any) => {
-//   const [message, setMessage] = useState("");
-//   const navigate = useNavigate();
-
-//   const handleSubmit = async (event?: React.FormEvent) => {
-//     if (event) event.preventDefault();
-//     if (!message.trim()) return;
-
-//     const currentMessage = message;
-
-//     try {
-//       setMessage("");
-
-//       const newRoom = await createRoom.mutateAsync({
-//         name: currentMessage,
-//       });
-
-//       const newRoomId = String(newRoom.id);
-
-//       insertMessage.mutate({
-//         content: currentMessage,
-//         roomId: newRoomId,
-//       });
-
-//       chatAI.mutate({
-//         message: currentMessage,
-//         id: nanoid(),
-//         roomId: newRoomId,
-//       });
-
-//       navigate(`/${newRoomId}`);
-//     } catch (error) {
-//       console.error("채팅방 생성 또는 메시지 전송 실패:", error);
-
-//       // 실패 시 복구
-//       setMessage(currentMessage);
-//       alert("오류가 발생했습니다. 다시 시도해주세요.");
-//     }
-//   };
-
-//   const handleKeyDown = (event: React.KeyboardEvent) => {
-//     if (event.nativeEvent.isComposing) return;
-
-//     if (event.key === "Enter" && !event.shiftKey) {
-//       event.preventDefault();
-//       handleSubmit();
-//     }
-//   };
-
-//   return {
-//     message,
-//     setMessage,
-//     handleSubmit,
-//     handleKeyDown,
-//   };
-// };
-
 const useStartConversation = () => {
   const qc = useQueryClient();
   return useMutation({
@@ -120,7 +63,15 @@ const useConversationMessage = () => {
   });
 };
 
-const useConversationResponse = (createConversationResponseMutate: any) => {
+type CreateMessageMutate = (args: {
+  content: string;
+  roomId: string;
+  isUser: boolean;
+}) => void;
+
+const useConversationResponse = (
+  createConversationResponseMutate: CreateMessageMutate,
+) => {
   const qc = useQueryClient();
 
   return useMutation({

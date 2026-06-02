@@ -8,6 +8,10 @@ import {
   splitResumeIntoSections,
 } from "../constants/resumePrompt";
 
+// 배열을 매핑 후 구분자로 연결. 배열이 아니면 빈 문자열 반환.
+const mapJoin = (arr: any, fn: (item: any) => string, sep: string): string =>
+  Array.isArray(arr) ? arr.map(fn).join(sep) : "";
+
 /**
  * LLM 응답에서 JSON 부분만 추출.
  * 배열 응답([...])과 객체 응답({...}) 모두 처리.
@@ -172,33 +176,33 @@ const parseAndSaveResume = async (file: File) => {
     const jobCategory = parsedData.professional_summary?.job_category || "직무미상";
     const currentRole = parsedData.professional_summary?.current_role || "";
 
-    const skillString = Array.isArray(parsedData.skills)
-      ? parsedData.skills.map((s: any) => s.skill_name).join(", ")
-      : "";
+    const skillString = mapJoin(parsedData.skills, (s: any) => s.skill_name, ", ");
 
-    const competencyString = Array.isArray(parsedData.professional_summary?.core_competencies)
-      ? parsedData.professional_summary.core_competencies.join(" ")
-      : "";
+    const competencyString = mapJoin(
+      parsedData.professional_summary?.core_competencies,
+      (c: any) => c,
+      " ",
+    );
 
-    const projectString = Array.isArray(parsedData.projects)
-      ? parsedData.projects
-          .map((p: any) => {
-            const techStr = Array.isArray(p.tech_stack) ? p.tech_stack.join(", ") : "";
-            const outcomeStr = p.outcomes || "";
-            return [p.project_name, techStr, outcomeStr].filter(Boolean).join(" | ");
-          })
-          .join("\n")
-      : "";
+    const projectString = mapJoin(
+      parsedData.projects,
+      (p: any) => {
+        const techStr = Array.isArray(p.tech_stack) ? p.tech_stack.join(", ") : "";
+        const outcomeStr = p.outcomes || "";
+        return [p.project_name, techStr, outcomeStr].filter(Boolean).join(" | ");
+      },
+      "\n",
+    );
 
-    const workTechString = Array.isArray(parsedData.work_experiences)
-      ? parsedData.work_experiences
-          .map((w: any) => {
-            const techStr = Array.isArray(w.tech_stack) ? w.tech_stack.join(", ") : "";
-            const achieveStr = Array.isArray(w.key_achievements) ? w.key_achievements.join(". ") : "";
-            return [w.company_name, w.job_title, techStr, achieveStr].filter(Boolean).join(" | ");
-          })
-          .join("\n")
-      : "";
+    const workTechString = mapJoin(
+      parsedData.work_experiences,
+      (w: any) => {
+        const techStr = Array.isArray(w.tech_stack) ? w.tech_stack.join(", ") : "";
+        const achieveStr = Array.isArray(w.key_achievements) ? w.key_achievements.join(". ") : "";
+        return [w.company_name, w.job_title, techStr, achieveStr].filter(Boolean).join(" | ");
+      },
+      "\n",
+    );
 
     const textToEmbed =
       `직군: ${jobCategory}\n직무: ${currentRole}\n기술스택: ${skillString}\n핵심역량: ${competencyString}\n주요프로젝트:\n${projectString}\n경력상세:\n${workTechString}`.trim();
