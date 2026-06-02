@@ -30,12 +30,7 @@ const CandidateCard = ({ data, onClick, isFavorite = false, onToggleFavorite }) 
         <UserInfo>
           <NameWrapper>
             <Text variant="bodyLg">{data.name}</Text>
-            {data.details?.internal_rating >= 4.0 && (
-              <Badge bgColor="#F6F2FE" textColor="#8337ED">
-                ✓ BEST
-              </Badge>
-            )}
-            {data.is_kosa_verified && (
+{data.is_kosa_verified && (
               <Badge bgColor="#D6F9FA" textColor="#00838A">
                 코사증빙
               </Badge>

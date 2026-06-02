@@ -1,8 +1,10 @@
 import { useParams, useNavigate, useOutletContext } from "react-router-dom";
+import { useState } from "react";
 import { SERVICE_NAME } from "../constants/service";
 import { supabase } from "../utils/supabase";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { fetchAndDecryptCandidate } from "../services/candidateService";
+import { downloadResumeDocx } from "../services/resumeDownloadService";
 import { useTextArea } from "./common/Input/hooks";
 import IconButton from "./common/button/IconButton";
 import Icon from "./common/Icon/Icon";
@@ -15,6 +17,7 @@ import { motion } from "framer-motion";
 import { scrollbarStyle } from "./layouts";
 import RadioGroup, { useRadioGroup } from "./common/radio-group";
 import { getUser } from "../utils/getUser";
+import Box from "./common/flex/box";
 
 const RATING_OPTIONS = [
   { label: "★☆☆☆☆", value: 1 },
@@ -29,6 +32,21 @@ const CandidateDetailPane = () => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const user = getUser();
+
+  const [isDownloading, setIsDownloading] = useState(false);
+
+  const handleDownload = async () => {
+    if (!data || isDownloading) return;
+    setIsDownloading(true);
+    try {
+      await downloadResumeDocx(data.name, data.rawResumeData, data.totalExperienceMonths);
+    } catch (e) {
+      console.error("이력서 다운로드 실패:", e);
+      alert("이력서 다운로드에 실패했습니다. 다시 시도해 주세요.");
+    } finally {
+      setIsDownloading(false);
+    }
+  };
 
   const { value: newComment, onChange, setValue } = useTextArea("");
   const {
@@ -150,13 +168,13 @@ const CandidateDetailPane = () => {
         stiffness: 300,
         damping: 25,
       }}
-      style={{ width: "100%", maxWidth: 720 }}
+      style={{ width: "100%", maxWidth: 1000 }}
       onClick={(e) => e.stopPropagation()}
     >
       <PaneWrapper>
         <Header>
           <Text variant="headingSm" weight="bold">
-            PROFILE
+            {data.name}
           </Text>
           <IconButton style="ghost" onClick={() => navigate("..")}>
             <Icon name="CloseL" />
@@ -183,6 +201,13 @@ const CandidateDetailPane = () => {
               <InfoItem>{data.email}</InfoItem>
               <InfoItem>{data.address}</InfoItem>
             </InfoBox>
+
+            <DownloadButton
+              onClick={handleDownload}
+              disabled={isDownloading}
+            >
+              {isDownloading ? "생성 중..." : "⬇ 이력서 다운로드"}
+            </DownloadButton>
           </ProfileCard>
 
           <DetailCard>
@@ -196,15 +221,6 @@ const CandidateDetailPane = () => {
                     {data.aiSummary}
                   </Text>
                 </SummaryTextWrapper>
-                <ScoreBox>
-                  <Text variant="bodySm" weight="medium" color="#6D7178">
-                    매칭 점수
-                  </Text>
-                  <ScoreValue>{data.matchScore}%</ScoreValue>
-                  <ProgressBarWrapper>
-                    <ProgressBar $percent={data.matchScore} />
-                  </ProgressBarWrapper>
-                </ScoreBox>
               </AISummaryBox>
             </Section>
 
@@ -212,11 +228,8 @@ const CandidateDetailPane = () => {
               <Text variant="headingXs" weight="bold">
                 기술
               </Text>
-              <div>
+              <Box gap={12}>
                 <Row>
-                  <Text variant="bodyMd" weight="medium" color="#6D7178">
-                    코딩언어
-                  </Text>
                   <TagList>
                     {data.skills.languages.map((skill) => (
                       <Tag key={skill}>{skill}</Tag>
@@ -224,16 +237,13 @@ const CandidateDetailPane = () => {
                   </TagList>
                 </Row>
                 <Row>
-                  <Text variant="bodyMd" weight="medium" color="#6D7178">
-                    코딩언어
-                  </Text>
                   <TagList>
                     {data.skills.frameworks.map((skill) => (
                       <Tag key={skill}>{skill}</Tag>
                     ))}
                   </TagList>
                 </Row>
-              </div>
+              </Box>
             </Section>
 
             <Section>
@@ -243,9 +253,11 @@ const CandidateDetailPane = () => {
               <div>
                 {data.workHistory.map((work, idx) => (
                   <Row key={idx}>
-                    <Text variant="bodyMd" weight="medium" color="#6D7178">
-                      {work.period}
-                    </Text>
+                    <div style={{width: '148px'}}>
+                      <Text variant="bodyMd" weight="medium" color="#6D7178">
+                        {work.period}
+                      </Text>
+                    </div>
                     <RowContent>
                       {work.company} <span>· {work.role}</span>
                     </RowContent>
@@ -355,7 +367,7 @@ const Overlay = styled.div`
 
 const PaneWrapper = styled.aside`
   width: 100%;
-  max-width: 720px;
+  max-width: 1000px;
   max-height: 90vh;
   background-color: var(--color-bg-primary, #ffffff);
   border: 1px solid var(--color-border-muted, #e6e8ea);
@@ -507,7 +519,6 @@ const ProgressBar = styled.div<{ $percent: number }>`
 
 const Row = styled.div`
   display: flex;
-  padding: var(--space-12, 12px) 0;
   border-bottom: 1px solid var(--color-border-muted, #e6e8ea);
 
   &:last-child {
@@ -519,7 +530,6 @@ const RowContent = styled.div`
   flex: 1;
   font-size: var(--font-size-label-md, 14px);
   color: var(--color-text-primary, #3c3e44);
-  text-align: right;
 
   span {
     color: var(--color-text-tertiary, #878a92);
@@ -533,7 +543,6 @@ const TagList = styled.div`
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-8, 8px);
-  justify-content: flex-end;
 `;
 
 const Tag = styled.span`
@@ -581,6 +590,29 @@ const CommentHeader = styled.div`
   display: flex;
   justify-content: space-between;
   align-items: center;
+`;
+
+const DownloadButton = styled.button`
+  width: 100%;
+  margin-top: 4px;
+  padding: 10px 0;
+  background-color: var(--color-bg-solid-brand, #4949d4);
+  color: #ffffff;
+  border: none;
+  border-radius: var(--radius-md, 8px);
+  font-size: var(--font-size-label-md, 14px);
+  font-weight: var(--font-weight-semibold, 600);
+  cursor: pointer;
+  transition: background 0.15s, opacity 0.15s;
+
+  &:hover:not(:disabled) {
+    background-color: #3737b8;
+  }
+
+  &:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
 `;
 
 export { CandidateDetailPane };
