@@ -16,6 +16,7 @@ interface Props {
   onFileDrop: (files: File[]) => void;
   isUploading?: boolean;
   uploadError?: boolean;
+  errorMessage?: string;
   onRetry?: () => void;
   uploadProgress?: { current: number; total: number };
   suggestions?: SuggestionItem[];
@@ -30,13 +31,14 @@ const PromptInput = ({
   onFileDrop,
   isUploading = false,
   uploadError = false,
+  errorMessage,
   onRetry,
   uploadProgress,
   suggestions,
   onSuggestionClick,
 }: Props) => {
   return (
-    <DragDropWrapper onFileDrop={onFileDrop} isUploading={isUploading} uploadError={uploadError} onRetry={onRetry} uploadProgress={uploadProgress}>
+    <DragDropWrapper onFileDrop={onFileDrop} isUploading={isUploading} uploadError={uploadError} errorMessage={errorMessage} onRetry={onRetry} uploadProgress={uploadProgress}>
       {suggestions && suggestions.length > 0 && (
         <SuggestionRow>
           {suggestions.map((s) => (

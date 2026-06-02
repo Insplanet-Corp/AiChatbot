@@ -1,6 +1,9 @@
 import { supabase } from "../utils/supabase";
 
-const fetchConversations = async (userId: any) => {
+type RoomId = string | number;
+type UserId = string | number;
+
+const fetchConversations = async (userId?: UserId | null) => {
   if (!userId) return [];
 
   const { data, error } = await supabase
@@ -13,22 +16,26 @@ const fetchConversations = async (userId: any) => {
   return data;
 };
 
-const startConversation = async ({ name, userId }: any) => {
+const startConversation = async ({
+  name,
+  userId,
+}: {
+  name: string;
+  userId: UserId;
+}) => {
   const { data, error } = await supabase
     .from("rooms")
-    .insert({ name: name, userid: userId })
+    .insert({ name, userid: userId })
     .select("*")
     .single();
 
   if (error) throw error;
-  return data; // 새로 만들어진 room row
+  return data;
 };
 
-// conversations 모두를 get 해오는 관점에서
-// fetchConversations 가 더 어울리지 않나 싶습니다.
-async function fetchConversation(roomId: any) {
+const fetchConversation = async (roomId: RoomId) => {
   const { data, error } = await supabase
-    .from("messages") // supabase 테이블 명도 변경 고민. conversation
+    .from("messages")
     .select("*")
     .eq("room_id", roomId)
     .order("created_at", { ascending: true });
@@ -38,17 +45,20 @@ async function fetchConversation(roomId: any) {
     throw error;
   }
   return data;
-}
+};
 
-// insert conversation / 추가 후 데이터 가져오기.
-async function createConversationMessage({
+const createConversationMessage = async ({
   content,
   isUser = false,
   roomId,
-}: any) {
+}: {
+  content: string;
+  isUser?: boolean;
+  roomId: RoomId;
+}) => {
   const { data, error } = await supabase
     .from("messages")
-    .insert({ content: content, is_user: isUser, room_id: roomId })
+    .insert({ content, is_user: isUser, room_id: roomId })
     .select("*")
     .single();
 
@@ -56,10 +66,10 @@ async function createConversationMessage({
     console.error("SUPABASE INSERT ERROR:", error);
     throw error;
   }
-  return data; // 새로 만들어진 room row
-}
+  return data;
+};
 
-async function deleteConversation(roomId: string) {
+const deleteConversation = async (roomId: RoomId) => {
   const { error: msgError } = await supabase
     .from("messages")
     .delete()
@@ -69,7 +79,7 @@ async function deleteConversation(roomId: string) {
 
   const { error } = await supabase.from("rooms").delete().eq("id", roomId);
   if (error) throw error;
-}
+};
 
 export {
   fetchConversations,

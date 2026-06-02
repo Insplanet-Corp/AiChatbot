@@ -1,7 +1,15 @@
 import { supabase } from "../utils/supabase";
 import { decryptJSON } from "../utils/encrypt";
-import { SERVICE_NAME } from "../constants/service";
+import { SERVICE_NAME, JOB_CATEGORIES, type JobCategory } from "../constants/service";
 import { formatExperience } from "../utils/formatters";
+import type {
+  ResumeData,
+  ResumeRow,
+  ResumeSkillItem,
+  ResumeCertificationItem,
+  ResumeWorkExperience,
+  ResumeProject,
+} from "../types/resume";
 
 // -------------------------------------------------------
 // Shared card data shape used by CandidateCard component
@@ -13,7 +21,7 @@ export interface CandidateCardData {
   introduction: string;
   is_kosa_verified: boolean;
   basic_info: {
-    category: string;
+    category: JobCategory | null;
     experience_total: string;
     birth_year: number | null;
   };
@@ -35,10 +43,10 @@ export interface CandidateCardData {
 // -------------------------------------------------------
 
 // resume_data 복호화: 암호문(string / { encrypted }) 또는 평문 모두 처리
-const decryptResumeData = (raw: any): any => {
+const decryptResumeData = (raw: any): ResumeData => {
   try {
-    if (typeof raw === "string") return decryptJSON(raw);
-    if (raw?.encrypted) return decryptJSON(raw);
+    if (typeof raw === "string") return decryptJSON<ResumeData>(raw);
+    if (raw?.encrypted) return decryptJSON<ResumeData>(raw);
     return raw || {};
   } catch {
     return raw || {};
@@ -56,48 +64,119 @@ const decryptName = (raw: string, fallback: string): string => {
 };
 
 // row 1건을 복호화해 { rd, name } 으로 반환
-const decryptRow = (row: any): { rd: any; name: string } => {
+const decryptRow = (row: ResumeRow): { rd: ResumeData; name: string } => {
   const rd = decryptResumeData(row.resume_data);
   const name = decryptName(row.name, rd?.personal_info?.name || "이름 없음");
   return { rd, name };
 };
 
 // 프로필 이미지 URL 정리 (flaticon placeholder 는 null 처리)
-const getProfileImage = (rd: any): string | null => {
+const getProfileImage = (rd: ResumeData): string | null => {
   const url = rd?.personal_info?.profile_image_url;
   if (!url || url.includes("flaticon.com")) return null;
   return url;
 };
 
 // birth_date("YYYY...") → 출생연도(number) | null
-const parseBirthYear = (rd: any): number | null =>
+const parseBirthYear = (rd: ResumeData): number | null =>
   rd?.personal_info?.birth_date
     ? parseInt(rd.personal_info.birth_date.substring(0, 4))
     : null;
 
+// skill/certification 항목은 객체 또는 문자열로 들어올 수 있어 이름만 안전하게 추출
+const skillName = (item: ResumeSkillItem): string =>
+  typeof item === "string" ? item : item.skill_name || "";
+
+const certName = (item: ResumeCertificationItem): string =>
+  typeof item === "string" ? item : item.certification_name || "";
+
+const getSkillNames = (rd: ResumeData): string[] =>
+  Array.isArray(rd?.skills) ? rd.skills.map(skillName).filter(Boolean) : [];
+
+const getCertificationNames = (rd: ResumeData): string[] =>
+  Array.isArray(rd?.certifications)
+    ? rd.certifications.map(certName).filter(Boolean)
+    : [];
+
+// 한 줄 요약평 → 자기소개 순으로 우선 사용, 둘 다 없으면 fallback
+const getIntroduction = (rd: ResumeData, fallback: string): string =>
+  rd?.evaluation?.one_line_review ||
+  rd?.professional_summary?.introduction ||
+  fallback;
+
 const FINANCE_KEYWORDS = ["은행", "증권", "보험", "카드", "캐피탈", "저축", "금융", "투자", "자산", "신탁", "리스", "할부", "대출"];
 const IT_CERT_KEYWORDS = ["정보처리기능사", "정보처리산업기사", "정보처리기사"];
 
-export const mapRowToCardData = (row: any): CandidateCardData => {
+// LLM이 자유형식으로 생성한 job_category를 4개 표준 탭 카테고리로 분류
+// 문자열에서 각 카테고리 키워드가 가장 앞에 등장하는 위치 기준으로 선택
+const CATEGORY_KEYWORDS: { category: JobCategory; keywords: string[] }[] = [
+  {
+    category: "퍼블리싱",
+    keywords: ["퍼블리셔", "퍼블리싱", "publisher", "publishing"],
+  },
+  {
+    category: "개발",
+    keywords: [
+      "개발자", "개발", "developer", "engineer", "엔지니어",
+      "프론트엔드", "백엔드", "풀스택", "frontend", "backend", "fullstack",
+      "프로그래머", "programmer",
+    ],
+  },
+  {
+    category: "디자인",
+    keywords: ["디자인", "디자이너", "designer", "그래픽", "graphic", "영상", "편집"],
+  },
+  {
+    category: "기획",
+    keywords: ["기획", "기획자", " pm", " po"],
+  },
+];
+
+const classifyJobCategory = (rd: ResumeData | null, row: ResumeRow): JobCategory | null => {
+  const texts = [
+    row.job_category,
+    rd?.personal_info?.desired_position,
+    rd?.professional_summary?.job_category,
+    rd?.professional_summary?.current_role,
+    rd?.professional_summary?.desired_position,
+    ...(rd?.professional_summary?.core_competencies ?? []),
+    ...(Array.isArray(rd?.work_experiences)
+      ? rd.work_experiences.flatMap((w) => [w.job_title, w.department, w.responsibilities])
+      : []),
+    ...(Array.isArray(rd?.projects)
+      ? rd.projects.map((p) => p.role_and_tasks)
+      : []),
+  ].filter(Boolean).join(" ").toLowerCase();
+
+  let bestCategory: JobCategory | null = null;
+  let bestCount = 0;
+
+  for (const { category, keywords } of CATEGORY_KEYWORDS) {
+    let count = 0;
+    for (const kw of keywords) {
+      const re = new RegExp(kw.trim().toLowerCase(), "g");
+      count += (texts.match(re) ?? []).length;
+    }
+    if (count > bestCount) {
+      bestCount = count;
+      bestCategory = category;
+    }
+  }
+
+  return bestCategory;
+};
+
+export const mapRowToCardData = (row: ResumeRow): CandidateCardData => {
   const { rd, name } = decryptRow(row);
 
   const expLabel = formatExperience(row.total_experience_months);
   const birthYear = parseBirthYear(rd);
 
   const latestJob = Array.isArray(rd?.work_experiences) && rd.work_experiences[0];
-  const category =
-    row.job_category ||
-    latestJob?.job_title ||
-    rd?.personal_info?.desired_position ||
-    "직군 미상";
+  const category = classifyJobCategory(rd, row);
 
-  const skills: string[] = Array.isArray(rd?.skills)
-    ? rd.skills.map((s: any) => s.skill_name || s).filter(Boolean)
-    : [];
-
-  const qualifications: string[] = Array.isArray(rd?.certifications)
-    ? rd.certifications.map((c: any) => c.certification_name || c).filter(Boolean)
-    : [];
+  const skills = getSkillNames(rd);
+  const qualifications = getCertificationNames(rd);
 
   const finalEducation =
     Array.isArray(rd?.education) && rd.education[0]
@@ -110,11 +189,10 @@ export const mapRowToCardData = (row: any): CandidateCardData => {
     ? `${latestJob.company_name || ""} / ${latestJob.job_title || ""}`.trim()
     : "-";
 
-  const introduction =
-    rd?.evaluation?.one_line_review || rd?.professional_summary?.introduction || "";
+  const introduction = getIntroduction(rd, "");
 
   const has_finance_experience = Array.isArray(rd?.work_experiences) &&
-    rd.work_experiences.some((w: any) =>
+    rd.work_experiences.some((w: ResumeWorkExperience) =>
       FINANCE_KEYWORDS.some((kw) =>
         (w.company_name || "").includes(kw) ||
         (w.job_title || "").includes(kw) ||
@@ -163,34 +241,32 @@ const fetchAndDecryptCandidate = async (id: string) => {
 
   const { rd, name } = decryptRow(data);
   const months = data.total_experience_months || 0;
+  const birthYear = parseBirthYear(rd);
 
   return {
+    // 다운로드 서비스에서 원본 데이터가 필요하므로 포함
+    rawResumeData: rd,
+    totalExperienceMonths: months,
+
     name,
     experience: `경력 ${Math.floor(months / 12)}년 ${months % 12}개월`,
-    age: rd?.personal_info?.birth_date
-      ? `만 ${new Date().getFullYear() - parseInt(rd.personal_info.birth_date.substring(0, 4))}세`
-      : "나이 미상",
+    age: birthYear ? `만 ${new Date().getFullYear() - birthYear}세` : "나이 미상",
     phone: rd?.personal_info?.phone || "연락처 없음",
     email: rd?.personal_info?.email || "이메일 없음",
     address: rd?.personal_info?.address || "주소 미상",
     profileImage: getProfileImage(rd),
 
-    aiSummary:
-      rd?.evaluation?.one_line_review ||
-      rd?.professional_summary?.introduction ||
-      `${SERVICE_NAME} 요약평이 없습니다.`,
+    aiSummary: getIntroduction(rd, `${SERVICE_NAME} 요약평이 없습니다.`),
     matchScore: 82,
 
     skills: {
-      languages: Array.isArray(rd?.skills)
-        ? rd.skills.map((s: any) => s.skill_name)
-        : [],
+      languages: getSkillNames(rd),
       frameworks: [],
     },
 
     rating: data.rating || 0,
     workHistory: Array.isArray(rd?.work_experiences)
-      ? rd.work_experiences.map((w: any) => ({
+      ? rd.work_experiences.map((w: ResumeWorkExperience) => ({
           period: `${w.start_date || ""} ~ ${w.end_date || "현재"}`,
           company: w.company_name,
           role: `${w.department || ""} / ${w.job_title || ""}`,
@@ -200,7 +276,7 @@ const fetchAndDecryptCandidate = async (id: string) => {
         }))
       : [],
     majorExperience: Array.isArray(rd?.projects)
-      ? rd.projects.map((p: any) => ({
+      ? rd.projects.map((p: ResumeProject) => ({
           period: `${p.start_date || ""} ~ ${p.end_date || "현재"}`,
           project: p.project_name,
           role: p.role_and_tasks,

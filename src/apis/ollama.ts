@@ -1,5 +1,13 @@
 const OLLAMA_URL = import.meta.env.VITE_OLLAMA_URL;
 
+// JSON 응답을 강제하는 LLM 호출의 공통 옵션.
+// (낮은 temperature + 모델 종료 토큰 + JSON 포맷). 호출부에서 num_ctx 등을 덧붙여 사용한다.
+export const LLM_JSON_OPTIONS = {
+  temperature: 0.1,
+  stop: ["<|endoftext|>", "<|im_start|>", "<|im_end|>", "Question:"],
+  format: "json",
+} as const;
+
 const getEmbedding = async (text: string): Promise<number[]> => {
   const response = await fetch(`${OLLAMA_URL}/api/embeddings`, {
     method: "POST",

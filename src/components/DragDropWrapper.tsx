@@ -6,6 +6,7 @@ interface DragDropWrapperProps {
   onFileDrop: (files: File[]) => void;
   isUploading?: boolean;
   uploadError?: boolean;
+  errorMessage?: string;
   onRetry?: () => void;
   uploadProgress?: { current: number; total: number };
 }
@@ -15,6 +16,7 @@ export default function DragDropWrapper({
   onFileDrop,
   isUploading = false,
   uploadError = false,
+  errorMessage,
   onRetry,
   uploadProgress,
 }: DragDropWrapperProps) {
@@ -93,6 +95,20 @@ export default function DragDropWrapper({
           <div style={{ color: "#6b7280", fontSize: "12px" }}>
             파일을 다시 업로드하거나 재시도해 주세요.
           </div>
+          {errorMessage && (
+            <div
+              style={{
+                color: "#9ca3af",
+                fontSize: "11px",
+                maxWidth: "320px",
+                textAlign: "center",
+                lineHeight: 1.4,
+                wordBreak: "break-word",
+              }}
+            >
+              {errorMessage}
+            </div>
+          )}
           <div style={{ display: "flex", gap: "8px", marginTop: "4px" }}>
             <button
               onClick={onRetry}
@@ -128,7 +144,7 @@ export default function DragDropWrapper({
           <input
             ref={fileInputRef}
             type="file"
-            accept=".pdf,.doc,.docx,.txt,.hwp"
+            accept=".pdf,.docx,.txt,.hwp,.xlsx,.xls"
             multiple
             style={{ display: "none" }}
             onChange={handleNewFileSelect}

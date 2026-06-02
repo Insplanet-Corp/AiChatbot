@@ -1,16 +1,27 @@
 import { supabase } from "../utils/supabase";
 import { encryptJSON } from "../utils/encrypt";
-import { askOllama, getEmbedding } from "../apis/ollama";
+import { askOllama, getEmbedding, LLM_JSON_OPTIONS } from "../apis/ollama";
 import { extractTextFromFile } from "../utils/fileParser";
 import {
   RESUME_PARSER_MESSAGES,
   RESUME_PROJECTS_ONLY_MESSAGES,
   splitResumeIntoSections,
 } from "../constants/resumePrompt";
+import type { ResumeData, ResumeProject } from "../types/resume";
+
+// 이력서 파싱 LLM 호출 공통 옵션 (긴 컨텍스트 + JSON 강제)
+const RESUME_LLM_OPTIONS = {
+  num_ctx: 16384,
+  num_predict: 8192,
+  ...LLM_JSON_OPTIONS,
+};
 
 // 배열을 매핑 후 구분자로 연결. 배열이 아니면 빈 문자열 반환.
-const mapJoin = (arr: any, fn: (item: any) => string, sep: string): string =>
-  Array.isArray(arr) ? arr.map(fn).join(sep) : "";
+const mapJoin = <T>(
+  arr: T[] | undefined,
+  fn: (item: T) => string,
+  sep: string,
+): string => (Array.isArray(arr) ? arr.map(fn).join(sep) : "");
 
 /**
  * LLM 응답에서 JSON 부분만 추출.
@@ -85,7 +96,7 @@ const sanitizeUndefined = (obj: any): any => {
 };
 
 // 프로젝트명 기준 중복 제거
-const deduplicateProjects = (projects: any[]): any[] => {
+const deduplicateProjects = (projects: ResumeProject[]): ResumeProject[] => {
   const seen = new Set<string>();
   return projects.filter((p) => {
     const key = (p.project_name || "").trim();
@@ -96,21 +107,14 @@ const deduplicateProjects = (projects: any[]): any[] => {
 };
 
 // 프로젝트 청크 1개를 AI로 파싱
-const parseProjectChunk = async (chunk: string): Promise<any[]> => {
+const parseProjectChunk = async (chunk: string): Promise<ResumeProject[]> => {
   const raw = await askOllama(
     import.meta.env.VITE_LLAMA_TEXT_MODEL,
     RESUME_PROJECTS_ONLY_MESSAGES(chunk),
     true,
-    {
-      num_ctx: 16384,
-      num_predict: 8192,
-      temperature: 0.1,
-      stop: ["<|endoftext|>", "<|im_start|>", "<|im_end|>", "Question:"],
-      format: "json",
-    },
+    RESUME_LLM_OPTIONS,
   );
 
-  console.log("[프로젝트 청크 응답]", raw);
   try {
     const repaired = repairTruncatedJson(raw);
     const parsed = sanitizeUndefined(JSON.parse(repaired));
@@ -121,95 +125,116 @@ const parseProjectChunk = async (chunk: string): Promise<any[]> => {
   }
 };
 
+// 파싱 결과를 임베딩용 평문 텍스트로 조립 (직군/직무/기술/역량/프로젝트/경력)
+const buildEmbeddingText = (parsedData: ResumeData): string => {
+  const jobCategory = parsedData.professional_summary?.job_category || "직무미상";
+  const currentRole = parsedData.professional_summary?.current_role || "";
+
+  const skillString = mapJoin(
+    parsedData.skills,
+    (s) => (typeof s === "string" ? s : s.skill_name || ""),
+    ", ",
+  );
+
+  const competencyString = mapJoin(
+    parsedData.professional_summary?.core_competencies,
+    (c) => c,
+    " ",
+  );
+
+  const projectString = mapJoin(
+    parsedData.projects,
+    (p) => {
+      const techStr = Array.isArray(p.tech_stack) ? p.tech_stack.join(", ") : "";
+      const outcomeStr = p.outcomes || "";
+      return [p.project_name, techStr, outcomeStr].filter(Boolean).join(" | ");
+    },
+    "\n",
+  );
+
+  const workTechString = mapJoin(
+    parsedData.work_experiences,
+    (w) => {
+      const techStr = Array.isArray(w.tech_stack) ? w.tech_stack.join(", ") : "";
+      const achieveStr = Array.isArray(w.key_achievements) ? w.key_achievements.join(". ") : "";
+      return [w.company_name, w.job_title, techStr, achieveStr].filter(Boolean).join(" | ");
+    },
+    "\n",
+  );
+
+  return `직군: ${jobCategory}\n직무: ${currentRole}\n기술스택: ${skillString}\n핵심역량: ${competencyString}\n주요프로젝트:\n${projectString}\n경력상세:\n${workTechString}`.trim();
+};
+
+// 파일명에서 이름 추출 시 제거할 이력서 관련 키워드 (한글 토큰 오인 방지)
+const FILENAME_STOPWORDS = [
+  "경력기술서", "자기소개서", "재직증명서", "경력증명서",
+  "포트폴리오", "지원서", "이력서", "자소서", "경력", "이력",
+  "국문", "영문", "최종", "수정", "사본", "제출", "양식",
+  "resume", "portfolio", "cv",
+];
+
+/**
+ * 파일명에서 한글 이름을 추출. 찾지 못하면 null.
+ * 확장자·이력서 키워드·숫자·특수문자를 제거한 뒤 남은 한글 2~5자 토큰을 이름으로 본다.
+ * 예) "홍길동_이력서.pdf" → "홍길동", "[이력서]김철수_2024.docx" → "김철수"
+ */
+const extractNameFromFilename = (filename: string): string | null => {
+  let base = filename.replace(/\.[^.]+$/, ""); // 확장자 제거
+  for (const word of FILENAME_STOPWORDS) {
+    base = base.replace(new RegExp(word, "gi"), " ");
+  }
+  const token = base
+    .replace(/[^가-힣]+/g, " ") // 한글 외 문자는 구분자(공백)로 치환
+    .trim()
+    .split(/\s+/)
+    .find((t) => t.length >= 2 && t.length <= 5);
+  return token || null;
+};
+
 const parseAndSaveResume = async (file: File) => {
   try {
     const extractedText = await extractTextFromFile(file);
-    console.log(extractedText);
     if (!extractedText) throw new Error("파일에서 텍스트를 추출할 수 없습니다.");
 
     const { base: baseText, projectChunks } = splitResumeIntoSections(extractedText);
-    console.log(`[이력서 파싱] 기본섹션 + 프로젝트 청크 ${projectChunks.length}개로 분리`);
 
     // 1번 호출: 기본 정보 + 경력 + 학력 + 기술 전체 스키마
     const rawBase = await askOllama(
       import.meta.env.VITE_LLAMA_TEXT_MODEL,
       RESUME_PARSER_MESSAGES(projectChunks.length > 0 ? baseText : extractedText),
       true,
-      {
-        num_ctx: 16384,
-        num_predict: 8192,
-        temperature: 0.1,
-        stop: ["<|endoftext|>", "<|im_start|>", "<|im_end|>", "Question:"],
-        format: "json",
-      },
+      RESUME_LLM_OPTIONS,
     );
 
-    console.log("[1번 호출 완료]", rawBase);
-
     const repairedBase = repairTruncatedJson(rawBase);
-    let parsedData = sanitizeUndefined(JSON.parse(repairedBase));
+    const parsedData: ResumeData = sanitizeUndefined(JSON.parse(repairedBase));
 
     if (Array.isArray(parsedData.abilities)) {
-      parsedData.abilities = parsedData.abilities.map((item: any) =>
+      parsedData.abilities = parsedData.abilities.map((item) =>
         typeof item === "string" ? { desc: item } : item,
       );
     }
 
-    // 2~4번 호출: 프로젝트 청크별 병렬 파싱
+    // 2~4번 호출: 프로젝트 청크별 병렬 파싱 후 중복 제거하여 병합
     if (projectChunks.length > 0) {
-      console.log(`[프로젝트 파싱] ${projectChunks.length}개 청크 병렬 처리 시작`);
-
       const chunkResults = await Promise.all(
-        projectChunks.map((chunk, i) => {
-          console.log(`[${i + 2}번 호출] 프로젝트 청크 ${i + 1}/${projectChunks.length}`);
-          return parseProjectChunk(chunk);
-        }),
+        projectChunks.map((chunk) => parseProjectChunk(chunk)),
       );
-
-      const allProjects = deduplicateProjects(chunkResults.flat());
-      console.log(`[프로젝트 병합] 총 ${allProjects.length}개 프로젝트 추출`);
-      parsedData.projects = allProjects;
+      parsedData.projects = deduplicateProjects(chunkResults.flat());
     }
 
-    console.log("[최종 파싱 결과]", parsedData);
-
     const jobCategory = parsedData.professional_summary?.job_category || "직무미상";
-    const currentRole = parsedData.professional_summary?.current_role || "";
+    const vector = await getEmbedding(buildEmbeddingText(parsedData));
 
-    const skillString = mapJoin(parsedData.skills, (s: any) => s.skill_name, ", ");
+    // 이름: 파싱 결과 우선, 비어 있으면 파일명에서 추출, 그래도 없으면 "이름없음"
+    const parsedName = parsedData.personal_info?.name?.replace(/\s+/g, "");
+    const nameFromFile = parsedName ? null : extractNameFromFilename(file.name);
+    // 파일명으로 보강한 경우 resume_data 에도 반영 (UI 는 personal_info.name 을 표시)
+    if (nameFromFile) {
+      parsedData.personal_info = { ...parsedData.personal_info, name: nameFromFile };
+    }
 
-    const competencyString = mapJoin(
-      parsedData.professional_summary?.core_competencies,
-      (c: any) => c,
-      " ",
-    );
-
-    const projectString = mapJoin(
-      parsedData.projects,
-      (p: any) => {
-        const techStr = Array.isArray(p.tech_stack) ? p.tech_stack.join(", ") : "";
-        const outcomeStr = p.outcomes || "";
-        return [p.project_name, techStr, outcomeStr].filter(Boolean).join(" | ");
-      },
-      "\n",
-    );
-
-    const workTechString = mapJoin(
-      parsedData.work_experiences,
-      (w: any) => {
-        const techStr = Array.isArray(w.tech_stack) ? w.tech_stack.join(", ") : "";
-        const achieveStr = Array.isArray(w.key_achievements) ? w.key_achievements.join(". ") : "";
-        return [w.company_name, w.job_title, techStr, achieveStr].filter(Boolean).join(" | ");
-      },
-      "\n",
-    );
-
-    const textToEmbed =
-      `직군: ${jobCategory}\n직무: ${currentRole}\n기술스택: ${skillString}\n핵심역량: ${competencyString}\n주요프로젝트:\n${projectString}\n경력상세:\n${workTechString}`.trim();
-    const vector = await getEmbedding(textToEmbed);
-
-    const originalName = parsedData.personal_info?.name?.replace(/\s+/g, "") || "이름없음";
-
+    const originalName = parsedName || nameFromFile || "이름없음";
     const encryptedParsedData = encryptJSON(parsedData);
 
     const { data, error } = await supabase
@@ -230,7 +255,8 @@ const parseAndSaveResume = async (file: File) => {
     return data;
   } catch (error) {
     console.error("이력서 처리 오류:", error);
-    throw new Error("이력서 분석 또는 저장에 실패했습니다.");
+    const reason = error instanceof Error ? error.message : "알 수 없는 오류";
+    throw new Error(`이력서 분석 또는 저장에 실패했습니다: ${reason}`);
   }
 };
 

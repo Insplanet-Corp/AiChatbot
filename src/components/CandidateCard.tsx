@@ -43,7 +43,9 @@ const CandidateCard = ({ data, onClick, isFavorite = false, onToggleFavorite }) 
           </NameWrapper>
 
           <MetaInfo>
-            <span className="category">{data.basic_info.category}</span>
+            {data.basic_info.category && (
+              <span className="category">{data.basic_info.category}</span>
+            )}
             {" · "}
             {data.basic_info.experience_total}
             {" · "}

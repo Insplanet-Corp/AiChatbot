@@ -64,6 +64,7 @@ const ConversationPage = () => {
             onFileDrop={handleFileDrop}
             isUploading={resumeUpload.isPending}
             uploadError={resumeUpload.isError}
+            errorMessage={resumeUpload.error?.message}
             uploadProgress={uploadProgress}
             onRetry={handleRetry}
             suggestions={!roomID ? CHAT_SUGGESTIONS : undefined}

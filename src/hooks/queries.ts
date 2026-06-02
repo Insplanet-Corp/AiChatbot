@@ -103,7 +103,8 @@ const useResumeUpload = (roomID?: string) => {
     mutationFn: (file: File) => parseAndSaveResume(file),
     onSuccess: (savedData) => {
       console.log("이력서 파싱 및 저장 완료:", savedData);
-      alert("이력서가 성공적으로 저장되었습니다.");
+      // 새로 저장된 이력서가 인력 목록에 즉시 반영되도록 무효화
+      qc.invalidateQueries({ queryKey: ["candidates"] });
       if (roomID) {
         qc.invalidateQueries({ queryKey: ["conversation", roomID] });
       }

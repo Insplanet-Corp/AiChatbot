@@ -40,26 +40,29 @@ const extractTextFromFile = async (file: File): Promise<string> => {
       return fullText.trim();
     }
 
-    if (extension === "hwp") {
-      const arrayBuffer = await file.arrayBuffer();
-      const HWP = await import("hwp.js");
-      const getModel =
-        (HWP as any).getHwpModel || (HWP as any).default?.getHwpModel;
-      const hwpModel = getModel(new Uint8Array(arrayBuffer));
-      let fullText = "";
-      hwpModel.sections.forEach((s: any) =>
-        s.paragraphs.forEach((p: any) => {
-          p.texts?.forEach((t: any) => t.text && (fullText += t.text));
-          fullText += "\n";
-        }),
-      );
-      return fullText.trim();
-    }
+    // if (extension === "hwp") {
+    //   const arrayBuffer = await file.arrayBuffer();
+    //   const { parse } = await import("hwp.js");
+    //   const doc = parse(new Uint8Array(arrayBuffer), { type: "array" });
+    //   let fullText = "";
+    //   doc.sections.forEach((section: any) =>
+    //     section.content.forEach((paragraph: any) => {
+    //       paragraph.content.forEach((char: any) => {
+    //         // 일반 텍스트 글자만 string 값으로 저장됨(제어문자는 number)
+    //         if (typeof char.value === "string") fullText += char.value;
+    //       });
+    //       fullText += "\n";
+    //     }),
+    //   );
+    //   return fullText.trim();
+    // }
 
     throw new Error(`지원하지 않는 파일 형식: ${extension}`);
   } catch (error) {
     console.error("파일 파싱 에러:", error);
-    return "";
+    throw error instanceof Error
+      ? error
+      : new Error("파일을 읽는 중 오류가 발생했습니다.");
   }
 };
 

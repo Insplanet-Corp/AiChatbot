@@ -38,6 +38,11 @@ export const useResumeUploader = (resumeUpload: ResumeUploadMutation) => {
 
       isUploadingRef.current = false;
       setUploadProgress(undefined);
+      alert(
+        files.length > 1
+          ? `이력서 ${files.length}건이 성공적으로 저장되었습니다.`
+          : "이력서가 성공적으로 저장되었습니다.",
+      );
     },
     [resumeUpload],
   );

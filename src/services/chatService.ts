@@ -1,10 +1,11 @@
 import { supabase } from "../utils/supabase";
-import { askOllama, getEmbedding } from "../apis/ollama";
+import { askOllama, getEmbedding, LLM_JSON_OPTIONS } from "../apis/ollama";
 import {
   CHAT_TYPE_MESSAGES,
   CHAT_WITH_SUPABASE_MESSAGES,
 } from "../constants/chatPrompt";
 import { mapRowToCardData, CandidateCardData } from "./candidateService";
+import type { ResumeRow, ResumeWorkExperience, ResumeProject } from "../types/resume";
 
 export interface PostChatParams {
   id: string;
@@ -21,8 +22,8 @@ type ChatIntent = "search" | "chat";
 
 // 카드 데이터 + LLM 평가에 필요한 원본 경력/프로젝트
 type MinimalCandidate = CandidateCardData & {
-  work_experiences: any[];
-  projects: any[];
+  work_experiences: ResumeWorkExperience[];
+  projects: ResumeProject[];
 };
 
 const postChat = async (params: PostChatParams): Promise<ChatResponse> => {
@@ -77,12 +78,7 @@ const evaluateCandidate = async (candidate: MinimalCandidate, message: string) =
       import.meta.env.VITE_LLAMA_TEXT_MODEL,
       CHAT_WITH_SUPABASE_MESSAGES(message, JSON.stringify(candidateForLLM)),
       true,
-      {
-        num_ctx: 8192,
-        temperature: 0.1,
-        stop: ["<|endoftext|>", "<|im_start|>", "<|im_end|>", "Question:"],
-        format: "json",
-      },
+      { num_ctx: 8192, ...LLM_JSON_OPTIONS },
     );
 
     let parsed = JSON.parse(resultText);
@@ -130,7 +126,7 @@ const postChatWithSupabase = async ({
     }
 
     const minimalCandidates: MinimalCandidate[] = matchedCandidates.map(
-      (c: any) => ({
+      (c: ResumeRow) => ({
         ...mapRowToCardData(c),
         work_experiences: c.work_experiences || [],
         projects: c.projects || [],
