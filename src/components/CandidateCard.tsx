@@ -30,7 +30,7 @@ const CandidateCard = ({ data, onClick, isFavorite = false, onToggleFavorite }) 
           <NameWrapper>
             <Text variant="bodyLg">{data.name}</Text>
 {data.is_kosa_verified && (
-              <Badge bgColor="#D6F9FA" textColor="#00838A">
+              <Badge $bgColor="#D6F9FA" $textColor="#00838A">
                 코사증빙
               </Badge>
             )}
@@ -41,7 +41,7 @@ const CandidateCard = ({ data, onClick, isFavorite = false, onToggleFavorite }) 
                 <Text color="#00838a" weight="bold">{data.basic_info.category}</Text>
               )}
             {data.basic_info.grade && (
-              <Badge bgColor="#eef6f7" textColor="#00838a">{data.basic_info.grade}</Badge>
+              <Badge $bgColor="#eef6f7" $textColor="#00838a">{data.basic_info.grade}</Badge>
             )}
         </Box>
           <Row>
@@ -124,13 +124,13 @@ const NameWrapper = styled.div`
   gap: 8px;
 `;
 
-const Badge = styled.span<{ bgColor?: string; textColor?: string }>`
+const Badge = styled.span<{ $bgColor?: string; $textColor?: string }>`
   font-size: 11px;
   font-weight: 600;
   padding: 3px 8px;
   border-radius: 12px;
-  background-color: ${({ bgColor }) => bgColor || "#eee"};
-  color: ${({ textColor }) => textColor || "#333"};
+  background-color: ${({ $bgColor }) => $bgColor || "#eee"};
+  color: ${({ $textColor }) => $textColor || "#333"};
   white-space: nowrap;
 `;
 

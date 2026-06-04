@@ -118,7 +118,7 @@ function ConversationList() {
   );
 }
 
-const ConversationItem = styled.button<{ $active?: boolean }>`
+const ConversationItem = styled.div<{ $active?: boolean }>`
   width: 100%;
   display: flex;
   align-items: center;

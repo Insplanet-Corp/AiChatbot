@@ -81,7 +81,8 @@ const evaluateCandidate = async (candidate: MinimalCandidate, message: string) =
       { num_ctx: 8192, ...LLM_JSON_OPTIONS },
     );
 
-    let parsed = JSON.parse(resultText);
+    const cleanedText = resultText.replace(/^```(?:json)?\s*/i, "").replace(/\s*```\s*$/, "").trim();
+    let parsed = JSON.parse(cleanedText);
     parsed = Array.isArray(parsed) ? parsed[0] : parsed;
 
     return {

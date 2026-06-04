@@ -150,7 +150,7 @@ const CandidateDetailPane = () => {
     return (
       <Overlay onClick={() => navigate("..")}>
         <PaneWrapper onClick={(e) => e.stopPropagation()} style={{ justifyContent: "center", alignItems: "center" }}>
-          <h2>데이터를 불러오는데 실패했습니다.</h2>
+          <h2>데이터가 없습니다.</h2>
           <button onClick={() => navigate("..")}>돌아가기</button>
         </PaneWrapper>
       </Overlay>

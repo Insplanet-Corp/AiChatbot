@@ -35,7 +35,7 @@ const ConversationArea = ({
         if (hasCandidates) {
           return (
             <CandidateResultBlock key={mes.id}>
-              <ResultLabel>해당 조건에 맞는 인력을 {candidatesArray.length}명 찾았습니다.</ResultLabel>
+              <AIChatBubble message={`해당 조건에 맞는 인력을 ${candidatesArray.length}명 찾았습니다.`} />
               <CandidateGrid>
                 {candidatesArray.map((item: any) => (
                   <CandidateCardWrapper key={item.id} item={item} />

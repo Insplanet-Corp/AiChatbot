@@ -1,4 +1,4 @@
-import { useState, DragEvent, ReactNode, useRef } from "react";
+import { useState, ReactNode, useRef, useEffect } from "react";
 import { SERVICE_NAME } from "../constants/service";
 
 interface DragDropWrapperProps {
@@ -28,6 +28,47 @@ export default function DragDropWrapper({
 }: DragDropWrapperProps) {
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const dragCounterRef = useRef(0);
+
+  useEffect(() => {
+    const handleDragEnter = (e: DragEvent) => {
+      e.preventDefault();
+      dragCounterRef.current += 1;
+      if (dragCounterRef.current === 1) setIsDragging(true);
+    };
+
+    const handleDragLeave = (e: DragEvent) => {
+      e.preventDefault();
+      dragCounterRef.current -= 1;
+      if (dragCounterRef.current === 0) setIsDragging(false);
+    };
+
+    const handleDragOver = (e: DragEvent) => {
+      e.preventDefault();
+    };
+
+    const handleDrop = (e: DragEvent) => {
+      e.preventDefault();
+      dragCounterRef.current = 0;
+      setIsDragging(false);
+      if (e.dataTransfer?.files && e.dataTransfer.files.length > 0) {
+        const files = Array.from(e.dataTransfer.files).slice(0, 10);
+        onFileDrop(files);
+      }
+    };
+
+    document.addEventListener("dragenter", handleDragEnter as EventListener);
+    document.addEventListener("dragleave", handleDragLeave as EventListener);
+    document.addEventListener("dragover", handleDragOver as EventListener);
+    document.addEventListener("drop", handleDrop as EventListener);
+
+    return () => {
+      document.removeEventListener("dragenter", handleDragEnter as EventListener);
+      document.removeEventListener("dragleave", handleDragLeave as EventListener);
+      document.removeEventListener("dragover", handleDragOver as EventListener);
+      document.removeEventListener("drop", handleDrop as EventListener);
+    };
+  }, [onFileDrop]);
 
   const handleNewFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
@@ -37,42 +78,8 @@ export default function DragDropWrapper({
     }
   };
 
-  const handleDragEnter = (e: DragEvent<HTMLDivElement>) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setIsDragging(true);
-  };
-
-  const handleDragLeave = (e: DragEvent<HTMLDivElement>) => {
-    e.preventDefault();
-    e.stopPropagation();
-    if (e.currentTarget.contains(e.relatedTarget as Node)) return;
-    setIsDragging(false);
-  };
-
-  const handleDragOver = (e: DragEvent<HTMLDivElement>) => {
-    e.preventDefault();
-    e.stopPropagation();
-  };
-
-  const handleDrop = (e: DragEvent<HTMLDivElement>) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setIsDragging(false);
-    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-      const files = Array.from(e.dataTransfer.files).slice(0, 10);
-      onFileDrop(files);
-    }
-  };
-
   return (
-    <div
-      onDragEnter={handleDragEnter}
-      onDragLeave={handleDragLeave}
-      onDragOver={handleDragOver}
-      onDrop={handleDrop}
-      style={{ position: "relative", width: "100%" }}
-    >
+    <div style={{ position: "relative", width: "100%" }}>
       {/* 업로드 실패 모달 (position:fixed → 부모 높이와 무관하게 항상 전체 화면에 표시) */}
       {failedFiles.length > 0 && !isUploading && (
         <>
@@ -317,30 +324,27 @@ export default function DragDropWrapper({
         </div>
       )}
 
-      {/* 드래그 시 오버레이 */}
+      {/* 드래그 시 오버레이 (페이지 전체) */}
       {isDragging && (
         <div
           style={{
-            position: "absolute",
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            zIndex: 50,
-            backgroundColor: "rgba(255, 255, 255, 0.95)",
-            border: "2px dashed #007bff",
-            borderRadius: "12px",
+            position: "fixed",
+            inset: 0,
+            zIndex: 9999,
+            backgroundColor: "rgba(255, 255, 255, 0.6)",
+            border: "3px dashed #007bff",
             display: "flex",
             flexDirection: "column",
             justifyContent: "center",
             alignItems: "center",
             color: "#007bff",
-            backdropFilter: "blur(4px)",
-            margin: "20px 60px",
+            backdropFilter: "blur(2px)",
+            pointerEvents: "none",
           }}
         >
-          <div style={{ fontSize: "2rem", marginBottom: "8px" }}>📂</div>
-          <div style={{ fontWeight: "bold" }}>파일을 여기에 놓아주세요</div>
+          <div style={{ fontSize: "3rem", marginBottom: "12px" }}>📂</div>
+          <div style={{ fontWeight: "bold", fontSize: "18px" }}>파일을 여기에 놓아주세요</div>
+          <div style={{ fontSize: "13px", color: "#6b7280", marginTop: "6px" }}>PDF, DOC, DOCX, HWP 등 지원</div>
         </div>
       )}
 

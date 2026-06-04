@@ -307,6 +307,13 @@ FakesAssemblies/
 .ntvs_analysis.dat
 node_modules/
 
+# Build output
+dist/
+
+# 이력서 파싱 테스트 - 실제 이력서(PII 포함)와 결과물은 커밋하지 않음
+test-resumes/
+test-results/
+
 # Visual Studio 6 build log
 *.plg
 

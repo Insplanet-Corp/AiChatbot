@@ -56,7 +56,7 @@ const ChatLayout = () => {
         <UserRow>
           <Box direction="row" gap={8} style={{ alignItems: "center", minWidth: 0 }}>
             <Avatar style="icon" size={28} seed={user.name} />
-            <Text variant="labelMd" weight="medium" style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            <Text variant="labelMd" weight="medium">
               {user.name}
             </Text>
           </Box>

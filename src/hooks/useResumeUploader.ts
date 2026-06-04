@@ -39,12 +39,18 @@ export const useResumeUploader = (resumeUpload: ResumeUploadMutation) => {
 
       resumeUpload.reset();
       try {
-        await new Promise<void>((resolve, reject) => {
-          resumeUpload.mutate(file, {
-            onSuccess: () => resolve(),
-            onError: () => reject(),
-          });
-        });
+        const UPLOAD_TIMEOUT_MS = 5 * 60 * 1000;
+        await Promise.race([
+          new Promise<void>((resolve, reject) => {
+            resumeUpload.mutate(file, {
+              onSuccess: () => resolve(),
+              onError: () => reject(),
+            });
+          }),
+          new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error("timeout")), UPLOAD_TIMEOUT_MS),
+          ),
+        ]);
       } catch {
         accumulatedFailedRef.current = [...accumulatedFailedRef.current, file];
       }
