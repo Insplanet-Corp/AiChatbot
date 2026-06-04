@@ -22,6 +22,7 @@ export interface CandidateCardData {
   is_kosa_verified: boolean;
   basic_info: {
     category: JobCategory | null;
+    grade: string | null;
     experience_total: string;
     birth_year: number | null;
   };
@@ -212,6 +213,7 @@ export const mapRowToCardData = (row: ResumeRow): CandidateCardData => {
     is_kosa_verified: false,
     basic_info: {
       category,
+      grade: rd.file_grade ?? null,
       experience_total: expLabel,
       birth_year: birthYear,
     },

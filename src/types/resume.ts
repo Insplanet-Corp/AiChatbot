@@ -71,9 +71,24 @@ export interface ResumeCertification {
 export type ResumeSkillItem = ResumeSkill | string;
 export type ResumeCertificationItem = ResumeCertification | string;
 
+export interface ResumeLanguage {
+  language?: string;
+  test_name?: string;
+  score?: string;
+  acquisition_date?: string;
+}
+
+export interface ResumeAward {
+  competition_name?: string;
+  award_name?: string;
+  host_organization?: string;
+  award_date?: string;
+}
+
 export interface ResumeData {
   personal_info?: ResumePersonalInfo;
   professional_summary?: ResumeProfessionalSummary;
+  file_grade?: string;
   evaluation?: { one_line_review?: string };
   skills?: ResumeSkillItem[];
   work_experiences?: ResumeWorkExperience[];
@@ -81,6 +96,8 @@ export interface ResumeData {
   education?: ResumeEducation[]; // 레거시 키 (educations 이전 데이터 호환)
   educations?: ResumeEducation[];
   certifications?: ResumeCertificationItem[];
+  languages?: ResumeLanguage[];
+  awards?: ResumeAward[];
   // 일부 이력서는 자격/역량을 abilities 로 추출 (문자열 또는 { desc } 객체)
   abilities?: Array<{ desc?: string } | string>;
 }

@@ -7,6 +7,7 @@ import {
   RESUME_PROJECTS_ONLY_MESSAGES,
   splitResumeIntoSections,
 } from "../constants/resumePrompt";
+import { CANDIDATE_GRADES, type CandidateGrade } from "../constants/service";
 import type { ResumeData, ResumeProject } from "../types/resume";
 
 // 이력서 파싱 LLM 호출 공통 옵션 (긴 컨텍스트 + JSON 강제)
@@ -178,6 +179,11 @@ const FILENAME_STOPWORDS = [
  * 확장자·이력서 키워드·숫자·특수문자를 제거한 뒤 남은 한글 2~5자 토큰을 이름으로 본다.
  * 예) "홍길동_이력서.pdf" → "홍길동", "[이력서]김철수_2024.docx" → "김철수"
  */
+const extractGradeFromFilename = (filename: string): CandidateGrade | null => {
+  const base = filename.replace(/\.[^.]+$/, "");
+  return CANDIDATE_GRADES.find((g) => base.includes(g)) ?? null;
+};
+
 const extractNameFromFilename = (filename: string): string | null => {
   let base = filename.replace(/\.[^.]+$/, ""); // 확장자 제거
   for (const word of FILENAME_STOPWORDS) {
@@ -235,6 +241,12 @@ const parseAndSaveResume = async (file: File) => {
     }
 
     const originalName = parsedName || nameFromFile || "이름없음";
+
+    const gradeFromFile = extractGradeFromFilename(file.name);
+    if (gradeFromFile) {
+      parsedData.file_grade = gradeFromFile;
+    }
+
     const encryptedParsedData = encryptJSON(parsedData);
 
     const { data, error } = await supabase

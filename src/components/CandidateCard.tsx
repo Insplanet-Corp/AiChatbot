@@ -3,13 +3,9 @@ import styled from "styled-components";
 import Text from "./common/text/Text";
 import Icon from "./common/Icon/Icon";
 import { Avatar } from "./common/avatar";
-
-const renderStars = (rating) => {
-  if (!rating) return "-";
-  const fullStars = "★".repeat(Math.floor(rating));
-  const emptyStars = "☆".repeat(5 - Math.floor(rating));
-  return fullStars + emptyStars;
-};
+import { CandidateDetailList } from "./CandidateDetailList";
+import Row from "./common/flex/row";
+import Box from "./common/flex/box";
 
 const CandidateCard = ({ data, onClick, isFavorite = false, onToggleFavorite }) => {
   if (!data || !data.basic_info) return null;
@@ -37,15 +33,19 @@ const CandidateCard = ({ data, onClick, isFavorite = false, onToggleFavorite }) 
             )}
           </NameWrapper>
 
-          <MetaInfo>
+        <Box style={{ display: "flex", alignItems: "center", gap: "6px" }}>
             {data.basic_info.category && (
-              <span className="category">{data.basic_info.category}</span>
+                <Text color="#00838a" weight="bold">{data.basic_info.category}</Text>
+              )}
+            {data.basic_info.grade && (
+              <Badge bgColor="#eef6f7" textColor="#00838a">{data.basic_info.grade}</Badge>
             )}
+        </Box>
+          <Row>
+            <Text>{data.basic_info.experience_total}</Text>
             {" · "}
-            {data.basic_info.experience_total}
-            {" · "}
-            {data.basic_info.birth_year}년생 (만 {age}세)
-          </MetaInfo>
+            <Text>{data.basic_info.birth_year}년생 (만 {age}세)</Text>
+          </Row>
         </UserInfo>
 
         <StarButton onClick={handleStarClick} $active={isFavorite} title={isFavorite ? "즐겨찾기 해제" : "즐겨찾기 추가"}>
@@ -55,55 +55,7 @@ const CandidateCard = ({ data, onClick, isFavorite = false, onToggleFavorite }) 
 
       <Divider />
 
-      <DetailList>
-        <DetailRow>
-          <Text variant="labelSm" color="var(--color-text-tertiary, #878a92)">
-            최종학력
-          </Text>
-          <Value>{data.details?.final_education || "-"}</Value>
-        </DetailRow>
-
-        <DetailRow>
-          <Text variant="labelSm" color="var(--color-text-tertiary, #878a92)">
-            보유자격
-          </Text>
-          <Value>
-            {data.details?.qualifications?.length > 0
-              ? data.details.qualifications.join(", ")
-              : "-"}
-          </Value>
-        </DetailRow>
-
-        <DetailRow>
-          <Text variant="labelSm" color="var(--color-text-tertiary, #878a92)">
-            경력사항
-          </Text>
-          <Value className="truncate">
-            {data.details?.major_experience || "-"}
-          </Value>
-        </DetailRow>
-
-        <DetailRow>
-          <Text variant="labelSm" color="var(--color-text-tertiary, #878a92)">
-            보유기술
-          </Text>
-          <SkillContainer>
-            {data.details?.skills?.slice(0, 3).map((skill, idx) => (
-              <SkillTag key={idx}>{skill}</SkillTag>
-            ))}
-            {data.details?.skills?.length > 3 && <SkillTag>...</SkillTag>}
-          </SkillContainer>
-        </DetailRow>
-
-        <DetailRow>
-          <Text variant="labelSm" color="var(--color-text-tertiary, #878a92)">
-            내부평가
-          </Text>
-          <Value className="rating">
-            {renderStars(data.details?.internal_rating)}
-          </Value>
-        </DetailRow>
-      </DetailList>
+      <CandidateDetailList details={data.details} />
 
       <IntroBox>
         <Intro>{data.introduction || "소개글이 없습니다."}</Intro>
@@ -167,7 +119,6 @@ const NameWrapper = styled.div`
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-bottom: 4px;
 `;
 
 const Badge = styled.span<{ bgColor?: string; textColor?: string }>`
@@ -180,79 +131,12 @@ const Badge = styled.span<{ bgColor?: string; textColor?: string }>`
   white-space: nowrap;
 `;
 
-const MetaInfo = styled.div`
-  font-size: var(--font-size-label-sm, 12px);
-  color: var(--color-text-secondary, #6d7178);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-
-  .category {
-    color: #00838a;
-    font-weight: var(--font-weight-semibold, 600);
-  }
-`;
-
 const Divider = styled.hr`
   border: none;
   border-top: 1px solid var(--color-border-muted, #e6e8ea);
   margin: var(--space-16, 16px) 0;
 `;
 
-const DetailList = styled.div`
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  font-size: 14px;
-  margin-bottom: 20px;
-`;
-
-const DetailRow = styled.div`
-  display: flex;
-  align-items: center;
-  gap: 12px;
-
-  & > :first-child {
-    flex-shrink: 0;
-    width: 52px;
-  }
-`;
-
-const Value = styled.span`
-  flex: 1;
-  color: var(--color-text-emphasis, #181a1b);
-  font-weight: var(--font-weight-medium, 500);
-  min-width: 0;
-  font-size: var(--font-size-label-md, 14px);
-
-  &.truncate {
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-
-  &.rating {
-    font-size: var(--font-size-body-lg, 16px);
-    color: var(--color-text-primary, #3c3e44);
-    letter-spacing: 2px;
-  }
-`;
-
-const SkillContainer = styled.div`
-  display: flex;
-  gap: var(--space-4, 4px);
-  flex-wrap: wrap;
-  flex: 1;
-`;
-
-const SkillTag = styled.span`
-  background-color: var(--color-bg-secondary, #f1f2f4);
-  color: var(--color-text-secondary, #6d7178);
-  font-size: var(--font-size-caption-md, 12px);
-  font-weight: var(--font-weight-medium, 500);
-  padding: 2px 6px;
-  border-radius: var(--radius-xs, 4px);
-`;
 
 const IntroBox = styled.div`
   background-color: var(--color-bg-surface-primary, #f9f9fa);
