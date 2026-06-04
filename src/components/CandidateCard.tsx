@@ -7,11 +7,14 @@ import { CandidateDetailList } from "./CandidateDetailList";
 import Row from "./common/flex/row";
 import Box from "./common/flex/box";
 
+const EMPTY_VALUE = "내용없음";
+
 const CandidateCard = ({ data, onClick, isFavorite = false, onToggleFavorite }) => {
   if (!data || !data.basic_info) return null;
 
   const currentYear = 2026;
-  const age = currentYear - data.basic_info.birth_year;
+  const birthYear = data.basic_info.birth_year;
+  const age = birthYear != null ? currentYear - birthYear : null;
 
   const handleStarClick = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -33,7 +36,7 @@ const CandidateCard = ({ data, onClick, isFavorite = false, onToggleFavorite }) 
             )}
           </NameWrapper>
 
-        <Box style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+        <Box style={{ display: "flex", gap: "6px" }}>
             {data.basic_info.category && (
                 <Text color="#00838a" weight="bold">{data.basic_info.category}</Text>
               )}
@@ -44,7 +47,7 @@ const CandidateCard = ({ data, onClick, isFavorite = false, onToggleFavorite }) 
           <Row>
             <Text>{data.basic_info.experience_total}</Text>
             {" · "}
-            <Text>{data.basic_info.birth_year}년생 (만 {age}세)</Text>
+            <Text>{birthYear != null ? `${birthYear}년생 (만 ${age}세)` : EMPTY_VALUE}</Text>
           </Row>
         </UserInfo>
 
