@@ -1,3 +1,5 @@
+const DEFAULT_EDUCATION_LEVEL = "고졸";
+
 const RESUME_JSON_SCHEMA = {
   personal_info: {
     name: "",
@@ -87,6 +89,19 @@ You are a high-performance resume data extraction engine. Your goal is COMPLETE 
    - If scale (team size, budget, duration) is mentioned, put it in "scale".
 6. DATE FORMAT: Use YYYY-MM format. Use "현재" if end date is missing or marked as current.
 7. STRICT SCHEMA: Do NOT rename keys. Output valid JSON only.
+8. SCHOOL NAME: For "school_name", extract the institution name ONLY. Do NOT append campus location or region in parentheses (e.g., use "인제대학교" not "인제대학교 (김해)").
+8. JOB CATEGORY: "professional_summary.job_category" MUST be exactly one of these four values — no other value is allowed:
+   - "기획"  (service planning, UI/UX planning, PM, PO, strategy)
+   - "디자인" (UI/UX design, graphic design, web design, motion, editorial)
+   - "퍼블리싱" (web publishing, HTML/CSS, markup)
+   - "개발"  (frontend, backend, fullstack, mobile, DevOps, data engineering)
+   If the person covers multiple areas, pick the ONE that best describes their PRIMARY role.
+9. EDUCATION (NEVER EMPTY): "educations" must NEVER be an empty array.
+   - Scan the full resume for education history. Priority order: 대학원 > 대학교 > fallback.
+   - If 대학원 entries exist → include them (along with any 대학교 entries).
+   - If no 대학원 but 대학교 entries exist → include those.
+   - If NEITHER 대학원 NOR 대학교 is found anywhere in the resume → set educations to exactly:
+     [{ "start_date": "", "end_date": "", "school_name": "", "major": "", "graduation_status": "${DEFAULT_EDUCATION_LEVEL}" }]
 
 [ARRAY RULES]
 - "work_experiences": one object per employment entry (company change = new entry).
@@ -123,7 +138,7 @@ const RESUME_PARSER_MESSAGES = (resumeContent: string) => [
     content: `{
   "personal_info": { "name": "홍길동", "email": "hong@example.com", "phone": "010-1234-5678", "birth_date": "1990-01-01", "gender": "남", "address": "", "profile_image_url": "" },
   "professional_summary": {
-    "job_category": "백엔드 개발",
+    "job_category": "개발",
     "current_role": "백엔드 개발자",
     "total_experience_months": 96,
     "skill_grade": "고급",
@@ -294,4 +309,4 @@ const splitResumeIntoSections = (
   return { base: baseText, projectChunks };
 };
 
-export { RESUME_PARSER_MESSAGES, RESUME_PROJECTS_ONLY_MESSAGES, splitResumeIntoSections };
+export { DEFAULT_EDUCATION_LEVEL, RESUME_PARSER_MESSAGES, RESUME_PROJECTS_ONLY_MESSAGES, splitResumeIntoSections };
