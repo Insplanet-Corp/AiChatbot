@@ -15,10 +15,13 @@ interface Props {
   onKeyDown: (e: React.KeyboardEvent<HTMLFormElement>) => void;
   onFileDrop: (files: File[]) => void;
   isUploading?: boolean;
-  uploadError?: boolean;
-  errorMessage?: string;
+  failedFiles?: File[];
   onRetry?: () => void;
+  onCancel?: () => void;
+  onDismiss?: () => void;
   uploadProgress?: { current: number; total: number };
+  currentFile?: File;
+  queuedFiles?: File[];
   suggestions?: SuggestionItem[];
   onSuggestionClick?: (value: string) => void;
 }
@@ -30,15 +33,18 @@ const PromptInput = ({
   onKeyDown,
   onFileDrop,
   isUploading = false,
-  uploadError = false,
-  errorMessage,
+  failedFiles = [],
   onRetry,
+  onCancel,
+  onDismiss,
   uploadProgress,
+  currentFile,
+  queuedFiles = [],
   suggestions,
   onSuggestionClick,
 }: Props) => {
   return (
-    <DragDropWrapper onFileDrop={onFileDrop} isUploading={isUploading} uploadError={uploadError} errorMessage={errorMessage} onRetry={onRetry} uploadProgress={uploadProgress}>
+    <DragDropWrapper onFileDrop={onFileDrop} isUploading={isUploading} failedFiles={failedFiles} onRetry={onRetry} onCancel={onCancel} onDismiss={onDismiss} uploadProgress={uploadProgress} currentFile={currentFile} queuedFiles={queuedFiles}>
       {suggestions && suggestions.length > 0 && (
         <SuggestionRow>
           {suggestions.map((s) => (

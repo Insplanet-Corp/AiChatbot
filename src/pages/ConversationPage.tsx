@@ -25,7 +25,7 @@ const ConversationPage = () => {
   const response = useConversationResponse(message.mutate);
   const resumeUpload = useResumeUpload(roomID);
 
-  const { prompt, setPrompt, handleChange, handleKeyDown, handleSubmit, handleFileDrop, handleRetry, uploadProgress } =
+  const { prompt, setPrompt, handleChange, handleKeyDown, handleSubmit, handleFileDrop, handleRetry, handleCancel, handleDismiss, uploadProgress, failedFiles, isUploading, currentFile, queuedFiles } =
     useChatSubmit({
       roomID: roomID,
       user: user || { id: "" },
@@ -62,11 +62,14 @@ const ConversationPage = () => {
             onSubmit={handleSubmit}
             onKeyDown={handleKeyDown}
             onFileDrop={handleFileDrop}
-            isUploading={resumeUpload.isPending}
-            uploadError={resumeUpload.isError}
-            errorMessage={resumeUpload.error?.message}
+            isUploading={isUploading}
+            failedFiles={failedFiles}
             uploadProgress={uploadProgress}
             onRetry={handleRetry}
+            onCancel={handleCancel}
+            onDismiss={handleDismiss}
+            currentFile={currentFile}
+            queuedFiles={queuedFiles}
             suggestions={!roomID ? CHAT_SUGGESTIONS : undefined}
             onSuggestionClick={(val) => setPrompt(val)}
           />

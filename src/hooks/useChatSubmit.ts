@@ -101,7 +101,7 @@ export const useChatSubmit = ({
   );
 
   // 파일 업로드 관심사는 useResumeUploader 로 분리
-  const { handleFileDrop, handleRetry, uploadProgress } =
+  const { handleFileDrop, handleRetry, handleCancel, handleDismiss, uploadProgress, failedFiles, isUploading, currentFile, queuedFiles } =
     useResumeUploader(resumeUpload);
 
   return {
@@ -113,6 +113,12 @@ export const useChatSubmit = ({
       setPrompt(e.target.value),
     handleFileDrop,
     handleRetry,
+    handleCancel,
+    handleDismiss,
     uploadProgress,
+    failedFiles,
+    isUploading,
+    currentFile,
+    queuedFiles,
   };
 };

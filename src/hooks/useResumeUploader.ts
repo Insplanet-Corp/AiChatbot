@@ -8,62 +8,117 @@ interface ResumeUploadMutation {
   ) => void;
 }
 
-/**
- * 이력서 파일 업로드 관심사를 담당하는 훅.
- * 여러 파일을 순차 업로드하며 진행률(uploadProgress)과 재시도(handleRetry)를 제공한다.
- */
 export const useResumeUploader = (resumeUpload: ResumeUploadMutation) => {
   const [lastDroppedFiles, setLastDroppedFiles] = useState<File[]>([]);
+  const [failedFiles, setFailedFiles] = useState<File[]>([]);
   const [uploadProgress, setUploadProgress] = useState<
     { current: number; total: number } | undefined
   >(undefined);
+  const [currentFile, setCurrentFile] = useState<File | undefined>(undefined);
+  const [queuedFiles, setQueuedFiles] = useState<File[]>([]);
+
   const isUploadingRef = useRef(false);
+  const isCancelledRef = useRef(false);
+  const pendingRef = useRef<File[]>([]);
+  const totalRef = useRef(0);
+  const processedRef = useRef(0);
+  const accumulatedFailedRef = useRef<File[]>([]);
 
-  const uploadFiles = useCallback(
-    async (files: File[]) => {
-      if (isUploadingRef.current) return;
-      isUploadingRef.current = true;
-      setUploadProgress({ current: 0, total: files.length });
+  const runUploadLoop = useCallback(async () => {
+    if (isUploadingRef.current) return;
+    isUploadingRef.current = true;
+    isCancelledRef.current = false;
+    accumulatedFailedRef.current = [];
 
-      for (let i = 0; i < files.length; i++) {
-        setUploadProgress({ current: i + 1, total: files.length });
-        resumeUpload.reset();
+    while (pendingRef.current.length > 0 && !isCancelledRef.current) {
+      const file = pendingRef.current.shift()!;
+      processedRef.current++;
+      setCurrentFile(file);
+      setQueuedFiles([...pendingRef.current]);
+      setUploadProgress({ current: processedRef.current, total: totalRef.current });
+
+      resumeUpload.reset();
+      try {
         await new Promise<void>((resolve, reject) => {
-          resumeUpload.mutate(files[i], {
+          resumeUpload.mutate(file, {
             onSuccess: () => resolve(),
-            onError: () => reject(new Error(`파일 ${files[i].name} 업로드 실패`)),
+            onError: () => reject(),
           });
         });
+      } catch {
+        accumulatedFailedRef.current = [...accumulatedFailedRef.current, file];
       }
+    }
 
-      isUploadingRef.current = false;
-      setUploadProgress(undefined);
+    const failed = accumulatedFailedRef.current;
+    const successCount = processedRef.current - failed.length;
+
+    isUploadingRef.current = false;
+    totalRef.current = 0;
+    processedRef.current = 0;
+    accumulatedFailedRef.current = [];
+    setUploadProgress(undefined);
+    setCurrentFile(undefined);
+    setQueuedFiles([]);
+
+    if (isCancelledRef.current) return;
+
+    setFailedFiles(failed);
+
+    if (failed.length === 0) {
       alert(
-        files.length > 1
-          ? `이력서 ${files.length}건이 성공적으로 저장되었습니다.`
+        successCount > 1
+          ? `이력서 ${successCount}건이 성공적으로 저장되었습니다.`
           : "이력서가 성공적으로 저장되었습니다.",
       );
-    },
-    [resumeUpload],
-  );
+    }
+  }, [resumeUpload]);
+
+  const handleCancel = useCallback(() => {
+    isCancelledRef.current = true;
+    pendingRef.current = [];
+    setQueuedFiles([]);
+  }, []);
 
   const handleFileDrop = useCallback(
-    async (files: File[]) => {
+    (files: File[]) => {
       setLastDroppedFiles(files);
-      try {
-        await uploadFiles(files);
-      } catch {
+      setFailedFiles([]);
+      totalRef.current += files.length;
+      pendingRef.current = [...pendingRef.current, ...files];
+      setQueuedFiles([...pendingRef.current]);
+      runUploadLoop().catch(() => {
         isUploadingRef.current = false;
         setUploadProgress(undefined);
-      }
+        setCurrentFile(undefined);
+        setQueuedFiles([]);
+      });
     },
-    [uploadFiles],
+    [runUploadLoop],
   );
 
   const handleRetry = useCallback(() => {
-    if (!lastDroppedFiles.length) return;
-    uploadFiles(lastDroppedFiles).catch(() => {});
-  }, [lastDroppedFiles, uploadFiles]);
+    const toRetry = failedFiles.length > 0 ? failedFiles : lastDroppedFiles;
+    if (!toRetry.length) return;
+    setFailedFiles([]);
+    handleFileDrop(toRetry);
+  }, [failedFiles, lastDroppedFiles, handleFileDrop]);
 
-  return { handleFileDrop, handleRetry, uploadProgress };
+  const handleDismiss = useCallback(() => {
+    setFailedFiles([]);
+  }, []);
+
+  const isUploading = uploadProgress !== undefined;
+
+  return {
+    handleFileDrop,
+    handleRetry,
+    handleCancel,
+    handleDismiss,
+    uploadProgress,
+    failedFiles,
+    isUploading,
+    currentFile,
+    queuedFiles,
+  };
 };
