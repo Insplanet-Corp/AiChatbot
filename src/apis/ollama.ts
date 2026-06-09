@@ -1,5 +1,28 @@
 const OLLAMA_URL = import.meta.env.VITE_OLLAMA_URL;
 
+// 모델이 응답하지 않을 때 무한 대기하지 않도록 요청별 타임아웃(ms).
+// Ollama 모델이 VRAM 부족/고장 등으로 멈추면 여기서 끊고 에러로 처리해,
+// 화면이 5분간 멈춘 채 "응답 없음" 으로 보이는 상황을 막는다. (필요 시 조정)
+const EMBEDDING_TIMEOUT_MS = 30_000;
+const CHAT_TIMEOUT_MS = 120_000;
+
+// AbortSignal.timeout 으로 타임아웃을 걸고, 타임아웃 시 원인을 명확히 알려주는 fetch 래퍼.
+const fetchWithTimeout = async (
+  url: string,
+  init: RequestInit,
+  timeoutMs: number,
+  label: string,
+): Promise<Response> => {
+  try {
+    return await fetch(url, { ...init, signal: AbortSignal.timeout(timeoutMs) });
+  } catch (e) {
+    if (e instanceof DOMException && e.name === "TimeoutError") {
+      throw new Error(`${label} 타임아웃 (${timeoutMs / 1000}초 초과) — Ollama 모델 응답 없음`);
+    }
+    throw e;
+  }
+};
+
 // JSON 응답을 강제하는 LLM 호출의 공통 옵션.
 // (낮은 temperature + 모델 종료 토큰 + JSON 포맷). 호출부에서 num_ctx 등을 덧붙여 사용한다.
 export const LLM_JSON_OPTIONS = {
@@ -9,15 +32,20 @@ export const LLM_JSON_OPTIONS = {
 } as const;
 
 const getEmbedding = async (text: string): Promise<number[]> => {
-  const response = await fetch(`${OLLAMA_URL}/api/embeddings`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      model: import.meta.env.VITE_LLAMA_EMBEDDING_MODEL,
-      prompt: text,
-      keep_alive: -1, // 서버 GPU에 AI 모델 내리지 않도록 설정.
-    }),
-  });
+  const response = await fetchWithTimeout(
+    `${OLLAMA_URL}/api/embeddings`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: import.meta.env.VITE_LLAMA_EMBEDDING_MODEL,
+        prompt: text,
+        keep_alive: -1, // 서버 GPU에 AI 모델 내리지 않도록 설정.
+      }),
+    },
+    EMBEDDING_TIMEOUT_MS,
+    "Ollama 임베딩",
+  );
 
   if (!response.ok)
     throw new Error(`Ollama Embedding Error: ${response.status}`);
@@ -31,11 +59,16 @@ const askOllama = async (
   stream = true,
   options?: any,
 ): Promise<string> => {
-  const response = await fetch(`${OLLAMA_URL}/api/chat`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ model, messages, stream, options, keep_alive: -1 }),
-  });
+  const response = await fetchWithTimeout(
+    `${OLLAMA_URL}/api/chat`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ model, messages, stream, options, keep_alive: -1 }),
+    },
+    CHAT_TIMEOUT_MS,
+    `Ollama 채팅(${model})`,
+  );
 
   if (!response.ok) throw new Error(`Ollama Error: ${response.status}`);
 
