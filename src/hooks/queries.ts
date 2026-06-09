@@ -81,15 +81,17 @@ const useConversationResponse = (
     onSuccess: (data, variables) => {
       const text = data?.text ?? "";
 
-      if (!text) {
-        qc.setQueryData<Message[]>(["conversation", variables.roomId], (old) =>
-          old?.filter((m) => m.id !== variables.id),
-        );
-        return;
-      }
+      if (!text) return;
 
       createConversationResponseMutate({
         content: text,
+        roomId: variables.roomId,
+        isUser: variables.isUser,
+      });
+    },
+    onError: (_error, variables) => {
+      createConversationResponseMutate({
+        content: "응답 처리 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.",
         roomId: variables.roomId,
         isUser: variables.isUser,
       });

@@ -1,5 +1,5 @@
 import { ContentInner, FixedBottom, Main, ScrollBody } from "../components/layouts";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState, useMemo } from "react";
 import { useParams, Outlet } from "react-router-dom";
 import styled from "styled-components";
 import ConversationArea from "../components/ConversationArea";
@@ -9,6 +9,7 @@ import {
   useConversationResponse,
   useConversationMessage,
   useResumeUpload,
+  useStartConversation,
 } from "../hooks/queries";
 import { useChatSubmit } from "../hooks/useChatSubmit";
 import { getUser } from "../utils/getUser";
@@ -20,22 +21,48 @@ const ConversationPage = () => {
   const { id: roomID, candidateId } = useParams();
   const isAITyping = useIsMutating({ mutationKey: ["postChatAI"] }) > 0;
 
-  const { conversation } = useConversation(roomID);
+  const { conversation: messages } = useConversation(roomID);
+  const conversation = useStartConversation();
   const message = useConversationMessage();
   const response = useConversationResponse(message.mutate);
   const resumeUpload = useResumeUpload(roomID);
 
-  const { prompt, setPrompt, handleChange, handleKeyDown, handleSubmit, handleFileDrop, handleRetry, handleCancel, handleDismiss, uploadProgress, failedFiles, isUploading, currentFile, queuedFiles } =
+  const { prompt, setPrompt, handleChange, handleKeyDown, handleSubmit, submitQuery, handleFileDrop, handleRetry, handleCancel, handleDismiss, uploadProgress, failedFiles, isUploading, currentFile, queuedFiles } =
     useChatSubmit({
       roomID: roomID,
       user: user || { id: "" },
-      conversation: conversation,
+      conversation,
       message,
       response,
       resumeUpload,
     });
 
   const scrollRef = useRef<HTMLDivElement | null>(null);
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [isTimedOut, setIsTimedOut] = useState(false);
+
+  // 마지막 사용자 메시지 (재시도용)
+  const lastUserQuery = useMemo(
+    () => [...messages].reverse().find((m) => m.role === false)?.content || "",
+    [messages],
+  );
+
+  // 5분 타임아웃: isAITyping이 true인 채로 5분이 지나면 timeout 표시
+  useEffect(() => {
+    if (isAITyping) {
+      setIsTimedOut(false);
+      timeoutRef.current = setTimeout(() => setIsTimedOut(true), 5 * 60 * 1000);
+    } else {
+      setIsTimedOut(false);
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+        timeoutRef.current = null;
+      }
+    }
+    return () => {
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
+    };
+  }, [isAITyping]);
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -44,14 +71,20 @@ const ConversationPage = () => {
         behavior: "smooth",
       });
     }
-  }, [conversation]);
+  }, [messages, isTimedOut]);
 
   return (
     <PageWrapper>
       <Main>
         <ScrollBody ref={scrollRef}>
           <ContentInner size="narrow">
-            <ConversationArea messages={conversation} isAITyping={isAITyping} />
+            <ConversationArea
+              messages={messages}
+              isAITyping={isAITyping}
+              isTimedOut={isTimedOut}
+              lastQuery={lastUserQuery}
+              onRetryQuery={submitQuery}
+            />
           </ContentInner>
         </ScrollBody>
 
