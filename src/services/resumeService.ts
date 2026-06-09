@@ -1,5 +1,5 @@
 import { supabase } from "../utils/supabase";
-import { encryptJSON } from "../utils/encrypt";
+import { resumeDataToColumns } from "../utils/resumeMapper";
 import { askOllama, getEmbedding, LLM_JSON_OPTIONS } from "../apis/ollama";
 import { extractTextFromFile } from "../utils/fileParser";
 import {
@@ -197,10 +197,62 @@ const extractNameFromFilename = (filename: string): string | null => {
   return token || null;
 };
 
+// 이메일 정규식: 로컬파트@도메인.TLD(2자 이상). .com / .co.kr / .net 등 모두 매칭.
+const EMAIL_REGEX = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/;
+
+/**
+ * 이력서 평문에서 이메일을 추출. 찾지 못하면 null.
+ * LLM이 이메일을 누락하더라도 텍스트에 이메일 형식이 있으면 반드시 저장하기 위한 폴백.
+ * PDF 추출 시 "hong @ example. com" 처럼 @·. 주변에 공백이 끼는 경우까지 보정해 재시도한다.
+ */
+const extractEmailFromText = (text: string): string | null => {
+  if (!text) return null;
+  const direct = text.match(EMAIL_REGEX);
+  if (direct) return direct[0];
+  // @ · . 주변 공백 제거 후 재시도 (PDF 텍스트 추출 시 토큰이 분리되는 케이스)
+  const despaced = text.replace(/\s*([@.])\s*/g, "$1");
+  return despaced.match(EMAIL_REGEX)?.[0] ?? null;
+};
+
+// 이력서가 아닌 인터뷰 문서(인터뷰 질의서/전화 인터뷰 등)를 저장 대상에서 제외하기 위한 키워드.
+// 공백을 제거(despace)한 형태로 비교하므로 "전화 인터뷰" / "전화인터뷰" 띄어쓰기 차이를 무시한다.
+// (scripts/seedResumesToDB.mjs 에도 동일 로직이 있으니 수정 시 함께 변경)
+//
+// 파일명용: 파일은 의도적으로 명명되므로 "전화인터뷰" 같은 단독 키워드도 넓게 매칭.
+const INTERVIEW_FILENAME_KEYWORDS = [
+  "인터뷰질의서", "인터뷰질문지", "인터뷰질문서", "인터뷰시트",
+  "전화인터뷰", "전화면접", "면접질의서", "면접질문지",
+];
+// 본문용: '질의서/질문지/질문서/시트' 등 문서 유형어를 포함한 형태만.
+// (실제 이력서 본문의 "전화 인터뷰 진행" 같은 업무 설명과의 충돌을 막기 위함)
+const INTERVIEW_CONTENT_KEYWORDS = [
+  "인터뷰질의서", "인터뷰질문지", "인터뷰질문서", "인터뷰시트",
+  "면접질의서", "면접질문지",
+];
+
+const stripSpaces = (s: string): string => s.replace(/\s+/g, "");
+
+/**
+ * 이력서가 아닌 인터뷰 관련 문서(인터뷰 질의서/전화 인터뷰 등)인지 판별.
+ * - 파일명: 단독 키워드까지 넓게 검사.
+ * - 본문: 상단(제목 영역)만, 문서 유형어를 포함한 키워드로 검사 → 본문 업무 설명 오(誤)제외 방지.
+ */
+const isInterviewDocument = (filename: string, text: string): boolean => {
+  const nameKey = stripSpaces(filename);
+  if (INTERVIEW_FILENAME_KEYWORDS.some((k) => nameKey.includes(k))) return true;
+  const titleKey = stripSpaces(text.slice(0, 300)); // 본문 상단(제목) 영역만 검사
+  return INTERVIEW_CONTENT_KEYWORDS.some((k) => titleKey.includes(k));
+};
+
 const parseAndSaveResume = async (file: File) => {
   try {
     const extractedText = await extractTextFromFile(file);
     if (!extractedText) throw new Error("파일에서 텍스트를 추출할 수 없습니다.");
+
+    // 이력서가 아닌 인터뷰 문서(인터뷰 질의서/전화 인터뷰 등)는 DB 저장에서 제외
+    if (isInterviewDocument(file.name, extractedText)) {
+      throw new Error("이력서가 아닌 인터뷰 문서(인터뷰 질의서/전화 인터뷰 등)로 판단되어 저장에서 제외했습니다.");
+    }
 
     const { base: baseText, projectChunks } = splitResumeIntoSections(extractedText);
 
@@ -235,19 +287,30 @@ const parseAndSaveResume = async (file: File) => {
     // 이름: 파싱 결과 우선, 비어 있으면 파일명에서 추출, 그래도 없으면 "이름없음"
     const parsedName = parsedData.personal_info?.name?.replace(/\s+/g, "");
     const nameFromFile = parsedName ? null : extractNameFromFilename(file.name);
-    // 파일명으로 보강한 경우 resume_data 에도 반영 (UI 는 personal_info.name 을 표시)
+    // 파일명으로 보강한 경우 parsedData 에도 반영 (컬럼 분해 시 함께 저장됨)
     if (nameFromFile) {
       parsedData.personal_info = { ...parsedData.personal_info, name: nameFromFile };
     }
 
     const originalName = parsedName || nameFromFile || "이름없음";
 
+    // 이메일 누락 방지: 파싱값에 이메일 형식이 있으면 그대로 사용(정규화),
+    // 없으면 원문 전체에서 정규식으로 추출해 보강한다.
+    // (이력서에 이메일 형식이 존재하면 무조건 저장되도록 보장)
+    const emailFromParsed = extractEmailFromText(parsedData.personal_info?.email ?? "");
+    const finalEmail = emailFromParsed ?? extractEmailFromText(extractedText);
+    if (finalEmail) {
+      parsedData.personal_info = { ...parsedData.personal_info, email: finalEmail };
+    }
+
+    // 이력서 유효성: 이메일이 없으면 이력서가 아닐 가능성이 높다고 판단.
+    // 저장은 그대로 진행하되, is_valid_resume = false 로 기록해 구분할 수 있게 한다.
+    const isValidResume = !!finalEmail;
+
     const gradeFromFile = extractGradeFromFilename(file.name);
     if (gradeFromFile) {
       parsedData.file_grade = gradeFromFile;
     }
-
-    const encryptedParsedData = encryptJSON(parsedData);
 
     const { data, error } = await supabase
       .from("resumes")
@@ -256,9 +319,10 @@ const parseAndSaveResume = async (file: File) => {
           name: originalName,
           job_category: jobCategory,
           total_experience_months: parsedData.professional_summary?.total_experience_months || 0,
-          resume_data: encryptedParsedData,
           embedding: vector,
           rating: 0,
+          is_valid_resume: isValidResume, // 이메일 존재 여부로 판단한 이력서 유효성
+          ...resumeDataToColumns(parsedData), // 평문 컬럼/JSONB 로 분해 저장 (암호화 없음)
         },
       ])
       .select();
