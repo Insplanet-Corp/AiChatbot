@@ -10,7 +10,9 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "test:parse": "node scripts/testParseLocal.mjs",
-    "test:parse:verbose": "node scripts/testParseLocal.mjs --verbose"
+    "test:parse:verbose": "node scripts/testParseLocal.mjs --verbose",
+    "test:search": "node scripts/testSearch.mjs",
+    "seed:resumes": "node scripts/seedResumesToDB.mjs"
   },
   "dependencies": {
     "@google/genai": "^1.42.0",
