@@ -102,6 +102,14 @@ You are a high-performance resume data extraction engine. Your goal is COMPLETE 
    - If no 대학원 but 대학교 entries exist → include those.
    - If NEITHER 대학원 NOR 대학교 is found anywhere in the resume → set educations to exactly:
      [{ "start_date": "", "end_date": "", "school_name": "", "major": "", "graduation_status": "${DEFAULT_EDUCATION_LEVEL}" }]
+10. VERTICAL / TRANSPOSED TABLES (CRITICAL — most resumes look like this): The text comes from DOCX/PDF tables that became VERTICAL. A field label or a column-header line is followed by its value(s) on the FOLLOWING lines, NOT on the same line. You MUST still extract everything.
+   - Label→value: a label line, then its value on the next line(s).
+     e.g. "성명\\n이 정 민" → name; "생년월일\\n2001.02.27 (만 24세)" → birth_date "2001-02"; "거주지 주소\\n인천광역시 계양구" → address; "기술등급\\n초급" → skill_grade.
+   - Header→rows: a header line lists columns, then each following line is one row — map positionally.
+     학력 header "재학기간 학교명 전공 구분" → rows like "2019.03 ~ 2023.02 명지대학교 디지털콘텐츠디자인 졸업".
+     경력 header "근무기간 회사명 부서 직위 담당업무"; 프로젝트 header "기간 프로젝트명 고객사 역할/담당업무".
+   - NEVER leave educations / work_experiences / skills / certifications empty just because the layout is transposed — read the rows under each header.
+11. NAMES WITH SPACES: A name may be spaced syllable-by-syllable (e.g. "이 정 민", "강 석 규"). Remove the internal spaces → "이정민", "강석규".
 
 [ARRAY RULES]
 - "work_experiences": one object per employment entry (company change = new entry).
@@ -211,6 +219,42 @@ const RESUME_PARSER_MESSAGES = (resumeContent: string) => [
   "languages": [],
   "awards": []
 }`,
+  },
+  {
+    role: "user",
+    content: `[Resume Content]
+PROFILE
+성명
+홍 길 동
+담당업무
+디자인
+생년월일
+1990.01.01 (만 35세)
+성별
+남
+업무경력
+8년 0개월
+기술등급
+고급
+거주지 주소
+서울특별시 강남구
+학력
+재학기간  학교명  전공  구분
+2009.03 ~ 2013.02  한국대학교  시각디자인  졸업
+보유기술
+Figma, Photoshop, Illustrator, HTML/CSS
+경력
+근무기간  근무 회사명  부서  직위  담당업무
+2016.03 ~ 현재  디자인컴퍼니  브랜드디자인팀  팀장  브랜드 아이덴티티 및 UI/UX 디자인 총괄
+프로젝트 수행경력
+수행기간  프로젝트명  고객사  담당업무
+2024.01 ~ 2024.06  삼성 브랜드 리뉴얼  삼성전자  메인 UI 디자인 및 디자인시스템 구축. 사용성 평가 20% 개선.
+
+위 내용은 표가 세로로 펼쳐진(VERTICAL/TRANSPOSED) 레이아웃이다. 모든 섹션(학력/경력/기술/프로젝트)을 빠짐없이 추출하라.`,
+  },
+  {
+    role: "assistant",
+    content: `{"personal_info":{"name":"홍길동","email":"","phone":"","birth_date":"1990-01-01","gender":"남","address":"서울특별시 강남구","profile_image_url":""},"professional_summary":{"job_category":"디자인","current_role":"브랜드/UIUX 디자이너","total_experience_months":96,"skill_grade":"고급","major_achievement":"삼성 브랜드 리뉴얼 메인 UI 디자인 및 디자인시스템 구축","core_competencies":["브랜드 아이덴티티 디자인","UI/UX 디자인","디자인시스템 구축"],"introduction":"","desired_position":"","desired_salary":""},"evaluation":{"one_line_review":"브랜드와 UI/UX를 아우르는 고급 디자이너"},"skills":[{"skill_name":"Figma","proficiency_level":"상","notes":""},{"skill_name":"Photoshop","proficiency_level":"상","notes":""},{"skill_name":"Illustrator","proficiency_level":"상","notes":""},{"skill_name":"HTML/CSS","proficiency_level":"중","notes":""}],"work_experiences":[{"start_date":"2016-03","end_date":"현재","company_name":"디자인컴퍼니","department":"브랜드디자인팀","job_title":"팀장","responsibilities":"브랜드 아이덴티티 및 UI/UX 디자인 총괄","tech_stack":["Figma"],"key_achievements":[]}],"projects":[{"start_date":"2024-01","end_date":"2024-06","project_name":"삼성 브랜드 리뉴얼","client_company":"삼성전자","role_and_tasks":"메인 UI 디자인 및 디자인시스템 구축","tech_stack":["Figma"],"outcomes":"사용성 평가 20% 개선","scale":""}],"educations":[{"start_date":"2009-03","end_date":"2013-02","school_name":"한국대학교","major":"시각디자인","graduation_status":"졸업"}],"certifications":[],"languages":[],"awards":[]}`,
   },
   {
     role: "user",
