@@ -1,6 +1,8 @@
 import { ArrowBigUp, Plus } from "lucide-react";
+import { useState } from "react";
 import Row from "../Row";
 import DragDropWrapper from "../DragDropWrapper";
+import Icon from "../common/Icon/Icon";
 import styled from "styled-components";
 
 interface SuggestionItem {
@@ -57,7 +59,7 @@ const PromptInput = ({
       <form className="promptInput" onSubmit={onSubmit} onKeyDown={onKeyDown}>
         <PromptInputTextarea value={value} setMessage={setPrompt} />
         <Row justify="space-between">
-          <PromptInputTools />
+          <PromptInputTools value={value} />
           <PromptSubmitButton />
         </Row>
       </form>
@@ -82,12 +84,31 @@ const PromptInputTextarea = ({
   );
 };
 
-const PromptInputTools = () => {
+const PromptInputTools = ({ value }: { value: string }) => {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = () => {
+    if (!value.trim()) return;
+    navigator.clipboard.writeText(value).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    });
+  };
+
   return (
     <Row>
       <button className="iconButton">
         <Plus size={20} />
       </button>
+      {value.trim() && (
+        <CopyButton type="button" onClick={handleCopy} title="클립보드에 복사">
+          {copied ? (
+            <Icon name="Check" size={16} color="var(--color-primary, #00838a)" />
+          ) : (
+            <Icon name="Copy" size={16} color="var(--color-icon-tertiary, #878a92)" />
+          )}
+        </CopyButton>
+      )}
     </Row>
   );
 };
@@ -99,6 +120,22 @@ const PromptSubmitButton = () => {
     </button>
   );
 };
+
+const CopyButton = styled.button`
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  padding: 4px;
+  border-radius: var(--radius-sm, 6px);
+  cursor: pointer;
+  transition: background 0.15s;
+
+  &:hover {
+    background: var(--color-interaction-hover, rgba(24, 26, 27, 0.06));
+  }
+`;
 
 const SuggestionRow = styled.div`
   display: flex;
