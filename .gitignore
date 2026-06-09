@@ -314,6 +314,13 @@ dist/
 test-resumes/
 test-results/
 
+# 이력서 일괄 DB 등록 폴더 - 실제 이력서/이동본(PII 포함)은 커밋하지 않음 (README만 예외)
+resumes-inbox/*
+!resumes-inbox/README.txt
+
+# DB 백업(PII 포함) - 커밋 금지
+backups/
+
 # Visual Studio 6 build log
 *.plg
 
