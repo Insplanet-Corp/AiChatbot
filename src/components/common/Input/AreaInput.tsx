@@ -113,7 +113,7 @@ const AreaInput = forwardRef<HTMLTextAreaElement, AreaInputBaseProps>(
     return (
       <TextAreaContainer
         width={width}
-        variant={variant}
+        $variant={variant}
         size={size}
         data-state={state}
       >
@@ -133,7 +133,7 @@ const AreaInput = forwardRef<HTMLTextAreaElement, AreaInputBaseProps>(
 
 const TextAreaContainer = styled.div<{
   width: number | string;
-  variant: TextAreaVariant;
+  $variant: TextAreaVariant;
   size: TextAreaSize;
 }>`
   display: flex;
@@ -142,7 +142,7 @@ const TextAreaContainer = styled.div<{
   color: #111;
 
   ${({ size }) => SIZE_MAP[size]}
-  ${({ variant }) => VARIANT_MAP[variant]}
+  ${({ $variant }) => VARIANT_MAP[$variant]}
 
   width: ${({ width }) => (typeof width === "number" ? `${width}px` : width)};
 

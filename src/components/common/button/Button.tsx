@@ -36,7 +36,7 @@ const Button = ({
 }: BaseProps) => {
   return (
     <StyleButton
-      styled={style}
+      $styled={style}
       size={size}
       data-state={state}
       onClick={onClick}
@@ -112,7 +112,7 @@ const STYLED_MAP: Record<ButtonStyle, any> = {
   `,
 };
 
-const StyleButton = styled.button<{ styled: ButtonStyle; size: ButtonSize }>`
+const StyleButton = styled.button<{ $styled: ButtonStyle; size: ButtonSize }>`
   display: inline-flex;
   position: relative;
   overflow: hidden;
@@ -134,7 +134,7 @@ const StyleButton = styled.button<{ styled: ButtonStyle; size: ButtonSize }>`
   }
 
   ${({ size }) => SIZE_MAP[size]}
-  ${({ styled }) => STYLED_MAP[styled]}
+  ${({ $styled }) => STYLED_MAP[$styled]}
 
   &::after {
     content: "";
