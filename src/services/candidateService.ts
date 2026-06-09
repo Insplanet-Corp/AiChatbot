@@ -1,5 +1,5 @@
 import { supabase } from "../utils/supabase";
-import { decryptJSON } from "../utils/encrypt";
+import { rowToResumeData } from "../utils/resumeMapper";
 import { SERVICE_NAME, JOB_CATEGORIES, type JobCategory } from "../constants/service";
 import { formatExperience } from "../utils/formatters";
 import type {
@@ -40,34 +40,12 @@ export interface CandidateCardData {
 }
 
 // -------------------------------------------------------
-// 복호화 헬퍼 (mapRowToCardData / fetchAndDecryptCandidate 공용)
+// row → { rd, name } (mapRowToCardData / fetchAndDecryptCandidate 공용)
+// 세분화된 평문 컬럼/JSONB 에서 ResumeData 를 재조립한다. (복호화 없음)
 // -------------------------------------------------------
-
-// resume_data 복호화: 암호문(string / { encrypted }) 또는 평문 모두 처리
-const decryptResumeData = (raw: any): ResumeData => {
-  try {
-    if (typeof raw === "string") return decryptJSON<ResumeData>(raw);
-    if (raw?.encrypted) return decryptJSON<ResumeData>(raw);
-    return raw || {};
-  } catch {
-    return raw || {};
-  }
-};
-
-// 이름 복호화: 실패하거나 문자열이 아니면 fallback 사용
-const decryptName = (raw: string, fallback: string): string => {
-  try {
-    const result = decryptJSON<string>(raw);
-    return typeof result === "string" ? result : fallback;
-  } catch {
-    return fallback;
-  }
-};
-
-// row 1건을 복호화해 { rd, name } 으로 반환
-const decryptRow = (row: ResumeRow): { rd: ResumeData; name: string } => {
-  const rd = decryptResumeData(row.resume_data);
-  const name = decryptName(row.name, rd?.personal_info?.name || "이름 없음");
+const resumeFromRow = (row: ResumeRow): { rd: ResumeData; name: string } => {
+  const rd = rowToResumeData(row);
+  const name = row.name || rd?.personal_info?.name || "이름 없음";
   return { rd, name };
 };
 
@@ -168,7 +146,7 @@ const classifyJobCategory = (rd: ResumeData | null, row: ResumeRow): JobCategory
 };
 
 export const mapRowToCardData = (row: ResumeRow): CandidateCardData => {
-  const { rd, name } = decryptRow(row);
+  const { rd, name } = resumeFromRow(row);
 
   const expLabel = formatExperience(row.total_experience_months);
   const birthYear = parseBirthYear(rd);
@@ -241,7 +219,7 @@ const fetchAndDecryptCandidate = async (id: string) => {
   if (error) throw new Error(error.message);
   if (!data) throw new Error("후보자 데이터를 찾을 수 없습니다.");
 
-  const { rd, name } = decryptRow(data);
+  const { rd, name } = resumeFromRow(data);
   const months = data.total_experience_months || 0;
   const birthYear = parseBirthYear(rd);
 

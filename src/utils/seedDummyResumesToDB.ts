@@ -1,6 +1,7 @@
 import { getEmbedding } from "../apis/ollama";
-import { decryptJSON, encryptJSON } from "./encrypt";
+import { resumeDataToColumns } from "./resumeMapper";
 import { supabase } from "./supabase";
+import type { ResumeData } from "../types/resume";
 
 // 1. 10개의 랜덤 더미 이력서 데이터
 const dummyResumes = [
@@ -92,9 +93,8 @@ const seedDummyResumesToDB = async () => {
       // 2. bge-m3 임베딩 생성 (사용 중인 getEmbedding 함수 호출)
       const vector = await getEmbedding(textToEmbed);
 
-      // 3. 민감 정보 암호화
+      // 3. 평문 컬럼/JSONB 로 분해 (암호화 없음)
       const originalName = parsedData.personal_info.name.replace(/\s+/g, "");
-      const encryptedParsedData = encryptJSON(parsedData);
 
       // 4. Supabase DB Insert 객체 반환
       return {
@@ -102,8 +102,8 @@ const seedDummyResumesToDB = async () => {
         job_category: jobCategory,
         total_experience_months:
           parsedData.professional_summary.total_experience_months,
-        resume_data: encryptedParsedData,
         embedding: vector,
+        ...resumeDataToColumns(parsedData as unknown as ResumeData),
       };
     });
 

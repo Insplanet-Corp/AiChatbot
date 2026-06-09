@@ -8,6 +8,7 @@ import {
 import { postChat } from "../services/chatService";
 import { parseAndSaveResume } from "../services/resumeService";
 import { supabase } from "../utils/supabase";
+import { RESUME_CARD_COLUMNS } from "../utils/resumeMapper";
 
 interface Message {
   id: string;
@@ -121,7 +122,7 @@ const useCandidateList = () => {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("resumes")
-        .select("id, name, total_experience_months, rating, resume_data, created_at")
+        .select(RESUME_CARD_COLUMNS)
         .order("created_at", { ascending: false });
 
       if (error) throw new Error(error.message);

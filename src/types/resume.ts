@@ -1,5 +1,5 @@
-// 이력서(resume_data) 원본 데이터 구조.
-// LLM 파싱 결과이자 DB(resumes.resume_data)에 암호화되어 저장되는 JSON 스키마와 대응된다.
+// 이력서 원본 데이터 구조(앱 내부 메모리 표현).
+// LLM 파싱 결과이며, 저장 시 resumes 테이블의 평문 컬럼/JSONB 로 분해된다(utils/resumeMapper.ts).
 // 모든 필드를 optional 로 둔 이유: LLM 파싱/레거시 데이터에 따라 누락될 수 있기 때문.
 
 export interface ResumePersonalInfo {
@@ -102,16 +102,51 @@ export interface ResumeData {
   abilities?: Array<{ desc?: string } | string>;
 }
 
-// resumes 테이블 row.
-// 벡터 검색 RPC(match_resumes)는 work_experiences/projects 를 최상위로 함께 반환한다.
+// resumes 테이블 row (세분화 후: 평문 컬럼 + JSONB 목록).
+// 컬럼 ↔ ResumeData 변환은 utils/resumeMapper.ts 참고.
+// JSON 의 current_role 은 SQL 예약어라 컬럼명은 current_position.
 export interface ResumeRow {
   id: string;
   name: string;
-  resume_data: unknown; // 암호문(string) 또는 평문 객체
-  total_experience_months?: number;
   job_category?: string;
+  total_experience_months?: number;
   rating?: number;
   created_at?: string;
+
+  // personal_info
+  email?: string;
+  phone?: string;
+  birth_date?: string;
+  gender?: string;
+  address?: string;
+  profile_image_url?: string;
+
+  // professional_summary
+  current_position?: string; // = ResumeData.professional_summary.current_role
+  skill_grade?: string;
+  file_grade?: string;
+  major_achievement?: string;
+  introduction?: string;
+  desired_position?: string;
+  desired_salary?: string;
+
+  // evaluation
+  one_line_review?: string;
+
+  // JSONB 목록 섹션
+  core_competencies?: string[];
+  skills?: ResumeSkillItem[];
   work_experiences?: ResumeWorkExperience[];
   projects?: ResumeProject[];
+  educations?: ResumeEducation[];
+  certifications?: ResumeCertificationItem[];
+  languages?: ResumeLanguage[];
+  awards?: ResumeAward[];
+  abilities?: Array<{ desc?: string } | string>;
+
+  // 이력서 유효성: 이메일이 추출되면 true, 없으면 false (이력서가 아닐 가능성 있음)
+  is_valid_resume?: boolean;
+
+  // match_resumes RPC 결과에만 존재
+  similarity?: number;
 }
