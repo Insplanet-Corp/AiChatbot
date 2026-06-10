@@ -321,6 +321,10 @@ resumes-inbox/*
 # DB 백업(PII 포함) - 커밋 금지
 backups/
 
+# Claude Code 로컬 설정 - 머신 종속(절대경로 등)이라 커밋 금지
+# (settings.local.json 은 전역 ignore 에서 처리됨)
+.claude/launch.json
+
 # Visual Studio 6 build log
 *.plg
 
