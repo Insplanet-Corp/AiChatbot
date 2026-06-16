@@ -179,12 +179,21 @@ You are a high-performance resume data extraction engine. Your goal is COMPLETE 
      [{ "start_date": "", "end_date": "", "school_name": "", "major": "", "graduation_status": "${DEFAULT_EDUCATION_LEVEL}" }]
 10. VERTICAL / TRANSPOSED TABLES (CRITICAL — most resumes look like this): The text comes from DOCX/PDF tables that became VERTICAL. A field label or a column-header line is followed by its value(s) on the FOLLOWING lines, NOT on the same line. You MUST still extract everything.
    - Label→value: a label line, then its value on the next line(s).
-     e.g. "성명\\n이 정 민" → name; "생년월일\\n2001.02.27 (만 24세)" → birth_date "2001-02"; "거주지 주소\\n인천광역시 계양구" → address; "기술등급\\n초급" → skill_grade.
+     e.g. "성명\\n이 정 민" → name; "생년월일\\n2001.02.27 (만 24세)" → birth_date "2001-02-27" (keep the day); "거주지 주소\\n인천광역시 계양구" → address; "기술등급\\n초급" → skill_grade.
    - Header→rows: a header line lists columns, then each following line is one row — map positionally.
      학력 header "재학기간 학교명 전공 구분" → rows like "2019.03 ~ 2023.02 명지대학교 디지털콘텐츠디자인 졸업".
      경력 header "근무기간 회사명 부서 직위 담당업무"; 프로젝트 header "기간 프로젝트명 고객사 역할/담당업무".
    - NEVER leave educations / work_experiences / skills / certifications empty just because the layout is transposed — read the rows under each header.
 11. NAMES WITH SPACES: A name may be spaced syllable-by-syllable (e.g. "이 정 민", "강 석 규"). Remove the internal spaces → "이정민", "강석규".
+
+[FIELD FORMAT & EMPTY-VALUE RULES — put the RIGHT value in the RIGHT field, and leave absent values empty]
+- EMPTY MEANS ABSENT: If a value is NOT clearly present in the resume, output "" (empty string). NEVER guess, infer, fabricate, or copy a label/placeholder. Forbidden placeholder values: "XX", "YYYY", "YYYY.MM.DD", "0000", "미상", "해당없음", "없음", "N/A".
+- phone: a Korean phone number formatted as 010-0000-0000 (digits joined by hyphens). Put ONLY a phone number here — never an email, address, or experience text. If absent, "".
+- email: copy the exact email address as written (e.g. hong@example.com). Put ONLY an email here. If absent, "".
+- gender: EXACTLY "남" or "여". Map 남자/남성/男 → "남"; 여자/여성/女 → "여". If absent, "".
+- birth_date: "YYYY-MM-DD". If only year and month are known use "YYYY-MM"; if only the year is known use "YYYY". NEVER output placeholder months/days such as "XX", "??", or "00".
+- skill_grade (기술등급): EXACTLY one of "초급", "중급", "고급", "특급", or "". Do NOT put years of experience or free text here.
+- total_experience_months: an integer number of months only (e.g. "8년 0개월" → 96). If unknown, 0.
 
 [ARRAY RULES]
 - "work_experiences": one object per employment entry (company change = new entry).
@@ -487,6 +496,26 @@ const extractGradeFromFilename = (filename) => {
   return CANDIDATE_GRADES.find((g) => base.includes(g)) ?? null;
 };
 
+// 파일명 직군 태그 → 4개 표준 카테고리 (src/services/resumeService.ts extractCategoryFromFilename 동기화)
+const CATEGORY_FILENAME_PATTERNS = [
+  ["퍼블리싱", /퍼블|publish|마크업|markup/i],
+  ["개발", /개발|프론트\s*엔드|백\s*엔드|풀스택|frontend|backend|develop|engineer|프로그래/i],
+  ["디자인", /디자인|UI\/?UX|UX|그래픽|design/i],
+  ["기획", /기획|제안|PM|PO/i],
+];
+const extractCategoryFromFilename = (filename) => {
+  const base = filename.replace(/\.[^.]+$/, "");
+  const paren = base.match(/^\s*\(([^)]+)\)/);
+  // 내부 괄호 주석(출처/메모)은 제거해 회사명 오인 방지. 여러 태그면 가장 앞 직군 우선.
+  const head = (paren ? paren[1] : base.split("__")[0]).replace(/\([^)]*\)/g, " ");
+  let best = null, bestIdx = Infinity;
+  for (const [canon, re] of CATEGORY_FILENAME_PATTERNS) {
+    const m = head.match(re);
+    if (m && m.index !== undefined && m.index < bestIdx) { bestIdx = m.index; best = canon; }
+  }
+  return best;
+};
+
 const extractNameFromFilename = (filename) => {
   let base = filename.replace(/\.[^.]+$/, "");
   for (const word of FILENAME_STOPWORDS) base = base.replace(new RegExp(word, "gi"), " ");
@@ -527,26 +556,235 @@ const isInterviewDocument = (filename, text) => {
   return INTERVIEW_DOC_KEYWORDS.some((k) => nameKey.includes(k) || titleKey.includes(k));
 };
 
+// ── ResumeData 정규화 (src/utils/resumeNormalize.ts normalizeResumeData 와 동기화) ──
+// 저장 직전 값 표준화 + 빈값/placeholder 제거 (전화/성별/생년월일/등급 등).
+const nClean = (v) => {
+  if (typeof v !== "string") return undefined;
+  const t = v.trim();
+  return t.length ? t : undefined;
+};
+// 이름: 한글 음절형("홍 길 동")은 내부 공백 제거, 영문 이름은 공백 유지(중복만 축약)
+const nName = (v) => {
+  const t = nClean(v);
+  if (!t) return undefined;
+  return /^[가-힣\s]+$/.test(t) ? t.replace(/\s+/g, "") : t.replace(/\s+/g, " ");
+};
+const nCleanArr = (arr) => {
+  if (!Array.isArray(arr)) return [];
+  const seen = new Set();
+  const out = [];
+  for (const item of arr) {
+    const t = typeof item === "string" ? item.trim() : "";
+    if (!t) continue;
+    const key = t.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(t);
+  }
+  return out;
+};
+const nPhone = (raw) => {
+  const s = nClean(raw);
+  if (!s) return undefined;
+  let d = s.replace(/\D/g, "");
+  if (d.startsWith("82")) d = "0" + d.slice(2);
+  if (d.length < 9 || d.length > 12) return undefined;
+  if (d.length === 12) return `${d.slice(0, 4)}-${d.slice(4, 8)}-${d.slice(8)}`;
+  if (d.length === 11) return `${d.slice(0, 3)}-${d.slice(3, 7)}-${d.slice(7)}`;
+  if (d.length === 10) return d.startsWith("02") ? `02-${d.slice(2, 6)}-${d.slice(6)}` : `${d.slice(0, 3)}-${d.slice(3, 6)}-${d.slice(6)}`;
+  return d.startsWith("02") ? `02-${d.slice(2, 5)}-${d.slice(5)}` : undefined;
+};
+const nGender = (raw) => {
+  const s = nClean(raw);
+  if (!s) return undefined;
+  if (/^(남(자|성)?|男|m|male)$/i.test(s)) return "남";
+  if (/^(여(자|성)?|女|f|female)$/i.test(s)) return "여";
+  return undefined;
+};
+const nBirth = (raw) => {
+  const s = nClean(raw);
+  if (!s) return undefined;
+  const year = s.match(/(?:19|20)\d{2}/)?.[0];
+  if (year) {
+    const rest = s.slice(s.indexOf(year) + 4);
+    const nums = rest.match(/\d{1,2}/g) ?? [];
+    const m = nums[0] && +nums[0] >= 1 && +nums[0] <= 12 ? nums[0].padStart(2, "0") : null;
+    const d = m && nums[1] && +nums[1] >= 1 && +nums[1] <= 31 ? nums[1].padStart(2, "0") : null;
+    return [year, m, d].filter(Boolean).join("-");
+  }
+  const six = s.replace(/\D/g, "");
+  if (six.length === 6) {
+    const yy = +six.slice(0, 2), mo = +six.slice(2, 4), da = +six.slice(4, 6);
+    if (mo >= 1 && mo <= 12 && da >= 1 && da <= 31) {
+      const fy = yy >= 30 ? 1900 + yy : 2000 + yy;
+      return `${fy}-${six.slice(2, 4)}-${six.slice(4, 6)}`;
+    }
+  }
+  return undefined;
+};
+const N_GRADE = ["초급", "중급", "고급", "특급"];
+const nGrade = (raw) => {
+  const s = nClean(raw);
+  if (!s) return undefined;
+  if (N_GRADE.includes(s)) return s;
+  if (/\d/.test(s)) return undefined;
+  if (s.length <= 4 && s.endsWith("급")) return s;
+  return undefined;
+};
+const nUrl = (raw) => {
+  const s = nClean(raw);
+  if (!s) return undefined;
+  if (!/^https?:\/\//i.test(s)) return undefined;
+  if (s.toLowerCase().includes("flaticon.com")) return undefined;
+  return s;
+};
+const N_REGIONS = [
+  ["서울", /^서울/], ["부산", /^부산/], ["대구", /^대구/], ["인천", /^인천/],
+  ["광주", /^광주/], ["대전", /^대전/], ["울산", /^울산/], ["세종", /^세종/],
+  ["경기", /^경기/], ["강원", /^강원/], ["충북", /^(충북|충청북)/], ["충남", /^(충남|충청남)/],
+  ["전북", /^(전북|전라북)/], ["전남", /^(전남|전라남)/], ["경북", /^(경북|경상북)/],
+  ["경남", /^(경남|경상남)/], ["제주", /^제주/],
+];
+const nRegion = (address) => {
+  const s = nClean(address);
+  if (!s) return undefined;
+  const first = s.split(/\s/)[0];
+  for (const [canon, re] of N_REGIONS) if (re.test(first)) return canon;
+  return undefined;
+};
+// 원문 "업무경력 N년 M개월" → 총 개월수 (LLM 산술 오류 보정). (resumeNormalize.extractExperienceMonths 동기화)
+const nExpMonths = (text) => {
+  if (!text) return undefined;
+  const labeled = text.match(/(?:업무\s*경력|총\s*경력|경력\s*기간)[\s:]*(\d{1,2})\s*년(?:\s*(\d{1,2})\s*개월)?/);
+  const m = labeled ?? text.match(/(\d{1,2})\s*년\s*(\d{1,2})\s*개월/);
+  if (!m) return undefined;
+  const years = parseInt(m[1], 10);
+  const months = m[2] ? parseInt(m[2], 10) : 0;
+  if (isNaN(years)) return undefined;
+  return years * 12 + months;
+};
+const nSalary = (raw) => {
+  const s = nClean(raw);
+  if (!s) return {};
+  const negotiable = /협의|면접|추후|별도|결정|상담/.test(s) || undefined;
+  const period = /월|단가/.test(s) ? "월" : /연봉|연|年/.test(s) ? "연" : undefined;
+  let amount;
+  const m = s.replace(/,/g, "").match(/(\d+(?:\.\d+)?)\s*(억|천만|천|만)?/);
+  if (m) {
+    const n = parseFloat(m[1]);
+    const unit = m[2];
+    amount = unit === "억" ? n * 10000 : unit === "천만" || unit === "천" ? n * 1000 : Math.round(n);
+  }
+  return { amount, period, negotiable };
+};
+const nWork = (w) => ({
+  ...w,
+  start_date: nClean(w.start_date), end_date: nClean(w.end_date),
+  company_name: nClean(w.company_name), department: nClean(w.department),
+  job_title: nClean(w.job_title), responsibilities: nClean(w.responsibilities),
+  tech_stack: nCleanArr(w.tech_stack), key_achievements: nCleanArr(w.key_achievements),
+});
+const nProj = (p) => ({
+  ...p,
+  start_date: nClean(p.start_date), end_date: nClean(p.end_date),
+  project_name: nClean(p.project_name), client_company: nClean(p.client_company),
+  role_and_tasks: nClean(p.role_and_tasks), tech_stack: nCleanArr(p.tech_stack),
+  outcomes: nClean(p.outcomes), scale: nClean(p.scale),
+});
+const nSkills = (arr) => {
+  if (!Array.isArray(arr)) return [];
+  const seen = new Set();
+  const out = [];
+  for (const item of arr) {
+    const name = (typeof item === "string" ? item : item?.skill_name ?? "").trim();
+    if (!name) continue;
+    const key = name.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(typeof item === "string" ? name : { ...item, skill_name: name, proficiency_level: nClean(item.proficiency_level), notes: nClean(item.notes) });
+  }
+  return out;
+};
+const normalizeResumeData = (rd) => {
+  const pi = rd?.personal_info ?? {};
+  const ps = rd?.professional_summary ?? {};
+  const expRaw = ps.total_experience_months;
+  const totalMonths = typeof expRaw === "number" && isFinite(expRaw) ? Math.min(Math.max(Math.round(expRaw), 0), 720) : undefined;
+  const address = nClean(pi.address);
+  const salary = nSalary(ps.desired_salary);
+  return {
+    ...rd,
+    personal_info: {
+      ...pi,
+      name: nName(pi.name),
+      email: nClean(pi.email)?.toLowerCase(),
+      phone: nPhone(pi.phone),
+      birth_date: nBirth(pi.birth_date),
+      gender: nGender(pi.gender),
+      address,
+      region: nRegion(address),
+      profile_image_url: nUrl(pi.profile_image_url),
+      desired_position: nClean(pi.desired_position),
+    },
+    professional_summary: {
+      ...ps,
+      job_category: nClean(ps.job_category),
+      current_role: nClean(ps.current_role),
+      total_experience_months: totalMonths,
+      skill_grade: nGrade(ps.skill_grade),
+      major_achievement: nClean(ps.major_achievement),
+      core_competencies: nCleanArr(ps.core_competencies),
+      introduction: nClean(ps.introduction),
+      desired_position: nClean(ps.desired_position),
+      desired_salary: nClean(ps.desired_salary),
+      desired_salary_amount: salary.amount,
+      desired_salary_period: salary.period,
+      desired_salary_negotiable: salary.negotiable,
+    },
+    file_grade: nClean(rd.file_grade),
+    evaluation: { one_line_review: nClean(rd.evaluation?.one_line_review) },
+    skills: nSkills(rd.skills),
+    work_experiences: Array.isArray(rd.work_experiences)
+      ? rd.work_experiences.map(nWork).filter((w) => w.company_name || w.job_title || w.department || w.responsibilities || w.start_date || (w.tech_stack?.length ?? 0) > 0)
+      : [],
+    projects: Array.isArray(rd.projects)
+      ? rd.projects.map(nProj).filter((p) => p.project_name || p.role_and_tasks || p.outcomes || p.start_date)
+      : [],
+    certifications: Array.isArray(rd.certifications) ? rd.certifications.filter((c) => (typeof c === "string" ? c.trim() : (c?.certification_name ?? "").trim())) : [],
+    languages: Array.isArray(rd.languages) ? rd.languages.filter((l) => nClean(l?.language) || nClean(l?.test_name)) : [],
+    awards: Array.isArray(rd.awards) ? rd.awards.filter((a) => nClean(a?.award_name) || nClean(a?.competition_name)) : [],
+  };
+};
+
 // ── ResumeData → 컬럼 매핑 (src/utils/resumeMapper.ts resumeDataToColumns 와 동기화) ──
 // JSON current_role 은 SQL 예약어 회피로 컬럼 current_position 에 매핑.
+// 빈 문자열/공백/undefined 는 모두 NULL 로 저장(없는 정보가 ""로 들어가지 않도록).
+const blankToNull = (v) => {
+  const t = typeof v === "string" ? v.trim() : v;
+  return t ? t : null;
+};
 const resumeDataToColumns = (rd) => {
   const pi = rd?.personal_info ?? {};
   const ps = rd?.professional_summary ?? {};
   return {
-    email: pi.email ?? null,
-    phone: pi.phone ?? null,
-    birth_date: pi.birth_date ?? null,
-    gender: pi.gender ?? null,
-    address: pi.address ?? null,
-    profile_image_url: pi.profile_image_url ?? null,
-    current_position: ps.current_role ?? null,
-    skill_grade: ps.skill_grade ?? null,
-    file_grade: rd?.file_grade ?? null,
-    major_achievement: ps.major_achievement ?? null,
-    introduction: ps.introduction ?? null,
-    desired_position: ps.desired_position ?? pi.desired_position ?? null,
-    desired_salary: ps.desired_salary ?? null,
-    one_line_review: rd?.evaluation?.one_line_review ?? null,
+    email: blankToNull(pi.email),
+    phone: blankToNull(pi.phone),
+    birth_date: blankToNull(pi.birth_date),
+    gender: blankToNull(pi.gender),
+    address: blankToNull(pi.address),
+    region: blankToNull(pi.region),
+    profile_image_url: blankToNull(pi.profile_image_url),
+    current_position: blankToNull(ps.current_role),
+    skill_grade: blankToNull(ps.skill_grade),
+    file_grade: blankToNull(rd?.file_grade),
+    major_achievement: blankToNull(ps.major_achievement),
+    introduction: blankToNull(ps.introduction),
+    desired_position: blankToNull(ps.desired_position ?? pi.desired_position),
+    desired_salary: blankToNull(ps.desired_salary),
+    desired_salary_amount: ps.desired_salary_amount ?? null,
+    desired_salary_period: blankToNull(ps.desired_salary_period),
+    desired_salary_negotiable: ps.desired_salary_negotiable ?? null,
+    one_line_review: blankToNull(rd?.evaluation?.one_line_review),
     core_competencies: ps.core_competencies ?? [],
     skills: rd?.skills ?? [],
     work_experiences: rd?.work_experiences ?? [],
@@ -619,28 +857,42 @@ const parseResumeFile = async (filePath) => {
   const parsedName = parsedData.personal_info?.name?.replace(/\s+/g, "");
   const nameFromFile = parsedName ? null : extractNameFromFilename(filename);
   if (nameFromFile) parsedData.personal_info = { ...parsedData.personal_info, name: nameFromFile };
-  const originalName = parsedName || nameFromFile || "이름없음";
 
   // 이메일 누락 방지: 파싱값 우선(정규화), 없으면 원문 전체에서 정규식으로 추출해 보강
   const emailFromParsed = extractEmailFromText(parsedData.personal_info?.email ?? "");
   const finalEmail = emailFromParsed ?? extractEmailFromText(extractedText);
   if (finalEmail) parsedData.personal_info = { ...parsedData.personal_info, email: finalEmail };
 
-  // 이력서 유효성: 이메일이 없으면 이력서가 아닐 가능성이 높다고 판단.
-  // 저장은 그대로 진행하되, is_valid_resume = false 로 기록해 구분할 수 있게 한다.
-  const isValidResume = !!finalEmail;
-
   const gradeFromFile = extractGradeFromFilename(filename);
   if (gradeFromFile) parsedData.file_grade = gradeFromFile;
 
-  const jobCategory = parsedData.professional_summary?.job_category || "직무미상";
+  // 직군: 파일명 직군 태그("(퍼블)…")가 있으면 LLM 분류보다 우선
+  const categoryFromFile = extractCategoryFromFilename(filename);
+  if (categoryFromFile) {
+    parsedData.professional_summary = { ...parsedData.professional_summary, job_category: categoryFromFile };
+  }
+
+  // 총경력: 원문 "N년 M개월" 표기가 있으면 LLM 산술값보다 우선
+  const expFromText = nExpMonths(extractedText);
+  if (expFromText != null) {
+    parsedData.professional_summary = { ...parsedData.professional_summary, total_experience_months: expFromText };
+  }
+
+  // 저장 직전 값 정규화(전화/성별/생년월일/등급 표준화 + 빈값 제거)
+  const normalized = normalizeResumeData(parsedData);
+
+  const originalName = normalized.personal_info?.name || "이름없음";
+  const jobCategory = normalized.professional_summary?.job_category || "직무미상";
+  // 이력서 유효성: 이메일이 없으면 이력서가 아닐 가능성이 높다고 판단.
+  // 저장은 그대로 진행하되, is_valid_resume = false 로 기록해 구분할 수 있게 한다.
+  const isValidResume = !!normalized.personal_info?.email;
 
   // 4. 임베딩
   process.stdout.write("  [3/4] 임베딩 생성... ");
-  const vector = await getEmbedding(buildEmbeddingText(parsedData));
+  const vector = await getEmbedding(buildEmbeddingText(normalized));
   console.log(`완료 (${Array.isArray(vector) ? vector.length : "?"}차원)`);
 
-  return { parsedData, originalName, jobCategory, vector, isValidResume };
+  return { parsedData: normalized, originalName, jobCategory, vector, isValidResume };
 };
 
 const insertResume = async ({ parsedData, originalName, jobCategory, vector, isValidResume }) => {

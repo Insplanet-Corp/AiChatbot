@@ -9,6 +9,7 @@ export interface ResumePersonalInfo {
   birth_date?: string;
   gender?: string;
   address?: string;
+  region?: string; // address 에서 추출한 시/도 (서울/경기/부산 …). 정규화 시 자동 산출.
   profile_image_url?: string;
   desired_position?: string;
 }
@@ -23,6 +24,10 @@ export interface ResumeProfessionalSummary {
   introduction?: string;
   desired_position?: string;
   desired_salary?: string;
+  // desired_salary 원문에서 구조화한 값 (정규화 시 자동 산출).
+  desired_salary_amount?: number; // 금액(만원 단위). 예: "3,500만원" → 3500
+  desired_salary_period?: string; // "연" | "월"(단가). 불명확하면 미설정.
+  desired_salary_negotiable?: boolean; // 협의/면접 후 결정 등
 }
 
 export interface ResumeSkill {
@@ -119,6 +124,7 @@ export interface ResumeRow {
   birth_date?: string;
   gender?: string;
   address?: string;
+  region?: string; // address 에서 추출한 시/도
   profile_image_url?: string;
 
   // professional_summary
@@ -129,6 +135,9 @@ export interface ResumeRow {
   introduction?: string;
   desired_position?: string;
   desired_salary?: string;
+  desired_salary_amount?: number; // 만원 단위
+  desired_salary_period?: string; // "연" | "월"
+  desired_salary_negotiable?: boolean;
 
   // evaluation
   one_line_review?: string;

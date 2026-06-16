@@ -1,5 +1,6 @@
 import { supabase } from "../utils/supabase";
 import { resumeDataToColumns } from "../utils/resumeMapper";
+import { normalizeResumeData, extractExperienceMonths } from "../utils/resumeNormalize";
 import { askOllama, getEmbedding, LLM_JSON_OPTIONS } from "../apis/ollama";
 import { extractTextFromFile } from "../utils/fileParser";
 import {
@@ -7,7 +8,7 @@ import {
   RESUME_PROJECTS_ONLY_MESSAGES,
   splitResumeIntoSections,
 } from "../constants/resumePrompt";
-import { CANDIDATE_GRADES, type CandidateGrade } from "../constants/service";
+import { CANDIDATE_GRADES, type CandidateGrade, type JobCategory } from "../constants/service";
 import type { ResumeData, ResumeProject } from "../types/resume";
 
 // 이력서 파싱 LLM 호출 공통 옵션 (긴 컨텍스트 + JSON 강제)
@@ -184,6 +185,33 @@ const extractGradeFromFilename = (filename: string): CandidateGrade | null => {
   return CANDIDATE_GRADES.find((g) => base.includes(g)) ?? null;
 };
 
+// 파일명의 직군 태그를 4개 표준 카테고리로 매핑. (에이전시가 "(퍼블)홍길동__..." 처럼 명시)
+// 선두 괄호 "(...)" 안 또는 "__" 앞부분(태그 영역)만 검사해 본문/회사명 오인을 막는다.
+const CATEGORY_FILENAME_PATTERNS: Array<[JobCategory, RegExp]> = [
+  ["퍼블리싱", /퍼블|publish|마크업|markup/i],
+  ["개발", /개발|프론트\s*엔드|백\s*엔드|풀스택|frontend|backend|develop|engineer|프로그래/i],
+  ["디자인", /디자인|UI\/?UX|UX|그래픽|design/i],
+  ["기획", /기획|제안|PM|PO/i],
+];
+const extractCategoryFromFilename = (filename: string): JobCategory | null => {
+  const base = filename.replace(/\.[^.]+$/, "");
+  const paren = base.match(/^\s*\(([^)]+)\)/);
+  // 태그 영역: 선두 괄호 "(...)" 안, 없으면 "__" 앞부분.
+  // 내부 괄호 주석(출처/메모: "(출처_디자인그룹나인)" 등)은 제거해 회사명 오인을 막는다.
+  const head = (paren ? paren[1] : base.split("__")[0]).replace(/\([^)]*\)/g, " ");
+  // 여러 태그가 섞이면(예: "기획,디자인") 가장 앞에 적힌(=주(主)) 직군을 택한다.
+  let best: JobCategory | null = null;
+  let bestIdx = Infinity;
+  for (const [canon, re] of CATEGORY_FILENAME_PATTERNS) {
+    const m = head.match(re);
+    if (m && m.index !== undefined && m.index < bestIdx) {
+      bestIdx = m.index;
+      best = canon;
+    }
+  }
+  return best;
+};
+
 const extractNameFromFilename = (filename: string): string | null => {
   let base = filename.replace(/\.[^.]+$/, ""); // 확장자 제거
   for (const word of FILENAME_STOPWORDS) {
@@ -281,10 +309,7 @@ const parseAndSaveResume = async (file: File) => {
       parsedData.projects = deduplicateProjects(chunkResults.flat());
     }
 
-    const jobCategory = parsedData.professional_summary?.job_category || "직무미상";
-    const vector = await getEmbedding(buildEmbeddingText(parsedData));
-
-    // 이름: 파싱 결과 우선, 비어 있으면 파일명에서 추출, 그래도 없으면 "이름없음"
+    // 이름: 파싱 결과 우선, 비어 있으면 파일명에서 추출
     const parsedName = parsedData.personal_info?.name?.replace(/\s+/g, "");
     const nameFromFile = parsedName ? null : extractNameFromFilename(file.name);
     // 파일명으로 보강한 경우 parsedData 에도 반영 (컬럼 분해 시 함께 저장됨)
@@ -292,9 +317,7 @@ const parseAndSaveResume = async (file: File) => {
       parsedData.personal_info = { ...parsedData.personal_info, name: nameFromFile };
     }
 
-    const originalName = parsedName || nameFromFile || "이름없음";
-
-    // 이메일 누락 방지: 파싱값에 이메일 형식이 있으면 그대로 사용(정규화),
+    // 이메일 누락 방지: 파싱값에 이메일 형식이 있으면 그대로 사용,
     // 없으면 원문 전체에서 정규식으로 추출해 보강한다.
     // (이력서에 이메일 형식이 존재하면 무조건 저장되도록 보장)
     const emailFromParsed = extractEmailFromText(parsedData.personal_info?.email ?? "");
@@ -303,14 +326,40 @@ const parseAndSaveResume = async (file: File) => {
       parsedData.personal_info = { ...parsedData.personal_info, email: finalEmail };
     }
 
-    // 이력서 유효성: 이메일이 없으면 이력서가 아닐 가능성이 높다고 판단.
-    // 저장은 그대로 진행하되, is_valid_resume = false 로 기록해 구분할 수 있게 한다.
-    const isValidResume = !!finalEmail;
-
     const gradeFromFile = extractGradeFromFilename(file.name);
     if (gradeFromFile) {
       parsedData.file_grade = gradeFromFile;
     }
+
+    // 직군: 파일명에 에이전시 직군 태그("(퍼블)…")가 있으면 LLM 분류보다 우선.
+    const categoryFromFile = extractCategoryFromFilename(file.name);
+    if (categoryFromFile) {
+      parsedData.professional_summary = {
+        ...parsedData.professional_summary,
+        job_category: categoryFromFile,
+      };
+    }
+
+    // 총경력: 원문에 "N년 M개월" 표기가 있으면 LLM 산술값보다 우선(결정적·정확).
+    const expFromText = extractExperienceMonths(extractedText);
+    if (expFromText != null) {
+      parsedData.professional_summary = {
+        ...parsedData.professional_summary,
+        total_experience_months: expFromText,
+      };
+    }
+
+    // 저장 직전 값 정규화: 필드 의미에 맞게 표준화하고(전화/성별/생년월일/등급 등),
+    // 빈값·placeholder 는 비워 "없는 정보가 들어가지 않도록" 한다.
+    const normalized = normalizeResumeData(parsedData);
+
+    // 정규화 결과 기준으로 메타 컬럼/임베딩 도출
+    const originalName = normalized.personal_info?.name || "이름없음";
+    const jobCategory = normalized.professional_summary?.job_category || "직무미상";
+    // 이력서 유효성: 이메일이 없으면 이력서가 아닐 가능성이 높다고 판단.
+    // 저장은 그대로 진행하되, is_valid_resume = false 로 기록해 구분할 수 있게 한다.
+    const isValidResume = !!normalized.personal_info?.email;
+    const vector = await getEmbedding(buildEmbeddingText(normalized));
 
     const { data, error } = await supabase
       .from("resumes")
@@ -318,11 +367,11 @@ const parseAndSaveResume = async (file: File) => {
         {
           name: originalName,
           job_category: jobCategory,
-          total_experience_months: parsedData.professional_summary?.total_experience_months || 0,
+          total_experience_months: normalized.professional_summary?.total_experience_months || 0,
           embedding: vector,
           rating: 0,
           is_valid_resume: isValidResume, // 이메일 존재 여부로 판단한 이력서 유효성
-          ...resumeDataToColumns(parsedData), // 평문 컬럼/JSONB 로 분해 저장 (암호화 없음)
+          ...resumeDataToColumns(normalized), // 평문 컬럼/JSONB 로 분해 저장 (암호화 없음)
         },
       ])
       .select();
