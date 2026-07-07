@@ -8,6 +8,7 @@
 import fs from "fs";
 import path from "path";
 import { pathToFileURL } from "url";
+import { PROJECT_SECTION_PATTERN } from "./shared/patterns.mjs";
 
 const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname).replace(/^\/([A-Za-z]:)/, "$1"), "..");
 const getArg = (n) => { const a = process.argv.slice(2); const i = a.indexOf(n); return i !== -1 ? a[i + 1] : undefined; };
@@ -28,8 +29,7 @@ const extractText = async (fp) => {
 
 // 현재 운영 코드와 동일
 const splitResumeIntoSections = (text) => {
-  const projectSectionPattern = /(?:수상경력|프로젝트\s*수행\s*경력|프로젝트\s*이력|수행\s*경력|PROJECT)/i;
-  const matchIdx = text.search(projectSectionPattern);
+  const matchIdx = text.search(PROJECT_SECTION_PATTERN);
   if (matchIdx === -1) return { base: text, projectChunks: [], splitIdx: -1 };
   const baseText = text.substring(0, matchIdx).trim();
   return { base: baseText, splitIdx: matchIdx, hasSplit: true };

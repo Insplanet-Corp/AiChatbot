@@ -58,8 +58,9 @@ const cleanStringArray = (arr?: unknown): string[] => {
 export const extractExperienceMonths = (text?: string): number | undefined => {
   if (!text) return undefined;
   // 1순위: "업무경력/총경력/경력기간" 라벨 바로 뒤의 "N년 [M개월]"
+  // (PDF 표 재구성 시 라벨과 값 사이에 " | " 열 구분자가 끼는 형태도 허용)
   const labeled = text.match(
-    /(?:업무\s*경력|총\s*경력|경력\s*기간)[\s:]*(\d{1,2})\s*년(?:\s*(\d{1,2})\s*개월)?/,
+    /(?:업무\s*경력|총\s*경력|경력\s*기간)[\s:|]*(\d{1,2})\s*년(?:\s*(\d{1,2})\s*개월)?/,
   );
   // 2순위: 라벨이 없으면 "N년 M개월"(개월까지 명시된 형태만 — 프로젝트 내 "3년" 오인 방지)
   const m = labeled ?? text.match(/(\d{1,2})\s*년\s*(\d{1,2})\s*개월/);

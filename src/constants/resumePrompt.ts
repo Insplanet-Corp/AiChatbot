@@ -98,6 +98,7 @@ You are a high-performance resume data extraction engine. Your goal is COMPLETE 
    If the person covers multiple areas, pick the ONE that best describes their PRIMARY role.
 9. EDUCATION (NEVER EMPTY): "educations" must NEVER be an empty array.
    - Scan the full resume for education history. Priority order: 대학원 > 대학교 > fallback.
+   - Section headers may be in ENGLISH: "EDUCATION" = 학력, "WORK EXPERIENCE"/"CAREER" = 경력, "PROJECT" = 프로젝트, "SKILLS" = 보유기술. Treat them the same as Korean headers.
    - If 대학원 entries exist → include them (along with any 대학교 entries).
    - If no 대학원 but 대학교 entries exist → include those.
    - If NEITHER 대학원 NOR 대학교 is found anywhere in the resume → set educations to exactly:
@@ -108,6 +109,7 @@ You are a high-performance resume data extraction engine. Your goal is COMPLETE 
    - Header→rows: a header line lists columns, then each following line is one row — map positionally.
      학력 header "재학기간 학교명 전공 구분" → rows like "2019.03 ~ 2023.02 명지대학교 디지털콘텐츠디자인 졸업".
      경력 header "근무기간 회사명 부서 직위 담당업무"; 프로젝트 header "기간 프로젝트명 고객사 역할/담당업무".
+   - Column separator: table rows may use " | " between cells (e.g. "2019.03 ~ 2023.02 | 명지대학교 | 디지털콘텐츠디자인 | 졸업"). Map each cell to the corresponding header cell positionally.
    - NEVER leave educations / work_experiences / skills / certifications empty just because the layout is transposed — read the rows under each header.
 11. NAMES WITH SPACES: A name may be spaced syllable-by-syllable (e.g. "이 정 민", "강 석 규"). Remove the internal spaces → "이정민", "강석규".
 
@@ -293,13 +295,20 @@ RULES:
 4. Dates: YYYY-MM format. Use "현재" if ongoing.
 5. If client_company or role_and_tasks is missing from the text, use "" (empty string). NEVER use "undefined".
 6. tech_stack: extract any technology names mentioned in role_and_tasks. If none mentioned, use [].
-7. Do NOT include any key outside the schema above.`,
+7. Do NOT include any key outside the schema above.
+8. TABLE COLUMNS: rows may use " | " between cells. Map cells to header cells (수행기간 | 프로젝트명 | 고객사 | 담당업무) positionally.
+9. WRAPPED ROWS (CRITICAL): one table row may be SPLIT across two lines when cell text wraps — the first line has the start date ("2024.02 ~") and a following line begins with the end date only ("2024.09 | ..."). These lines are ONE project: merge them, joining fragmented cell text in reading order (e.g. "포인트 적립 시" + "스템 개편" → "포인트 적립 시스템 개편"). NEVER output a continuation line as a separate project.
+10. Ignore header lines and rows belonging to a following non-project section (자격증/수상/학력 등).`,
   },
   {
     role: "user",
     content: `[Project Section Text]
-2024.01 ~ 2024.06 카카오페이 결제 모듈 고도화 카카오 Spring Boot, Redis, Kafka로 개발. 결제 처리량 2배 향상.
-2023.03 ~ 2023.09 사내 모니터링 대시보드 구축 카카오 Grafana, Prometheus, Kubernetes로 구축. 야간 장애 대응 90% 감소.`,
+수행기간 | 프로젝트명 | 고객사 | 담당업무
+2024.01 ~ | 카카오페이 결제 모 | 카카오 | Spring Boot, Redis, Kafka로 개발. 결제 처리
+2024.06 | 듈 고도화 | 량 2배 향상.
+2023.03 ~ 2023.09 | 사내 모니터링 대시보드 구축 | 카카오 | Grafana, Prometheus, Kubernetes로 구축. 야간 장애 대응 90% 감소.
+자격증
+정보처리기사 | 한국산업인력공단 | 2014.11`,
   },
   {
     role: "assistant",
@@ -317,14 +326,16 @@ Extract ALL projects above as a JSON array. Do not skip any entry. Empty fields 
   },
 ];
 
+// 프로젝트/수상경력 섹션이 시작되는 지점을 찾는 패턴.
+// scripts/shared/patterns.mjs 의 PROJECT_SECTION_PATTERN 과 동기화 유지.
+export const PROJECT_SECTION_PATTERN =
+  /(?:수상경력|프로젝트\s*수행\s*경력|프로젝트\s*이력|수행\s*경력|PROJECT)/i;
+
 // 알려진 섹션 헤더로 텍스트를 섹션 맵으로 분리
 const splitResumeIntoSections = (
   text: string,
 ): { base: string; projectChunks: string[] } => {
-  // 프로젝트/수상경력 섹션을 분리하는 패턴
-  const projectSectionPattern =
-    /(?:수상경력|프로젝트\s*수행\s*경력|프로젝트\s*이력|수행\s*경력|PROJECT)/i;
-  const projectSectionMatch = text.search(projectSectionPattern);
+  const projectSectionMatch = text.search(PROJECT_SECTION_PATTERN);
 
   if (projectSectionMatch === -1) {
     return { base: text, projectChunks: [] };
@@ -339,9 +350,11 @@ const splitResumeIntoSections = (
   let currentEntry = "";
 
   for (const line of lines) {
-    // 날짜 패턴으로 새 항목 시작 감지 (예: 2024.01 ~ 2024.06 또는 2024-01)
+    // 날짜 "범위 시작"(~ 포함)으로만 새 항목을 감지 (예: "2024.01 ~").
+    // 좌표 재구성된 표에서 셀이 줄바꿈되면 "2024.09 | 스템 개편"처럼 종료일만 있는
+    // 이어짐 줄이 생기는데, 단순 날짜 패턴이면 이를 새 항목으로 오인해 프로젝트가 쪼개진다.
     const isNewEntry =
-      /^\s*(\d{4}[.\-]\d{2}|\d{4}년)/.test(line) ||
+      /^\s*(\d{4}[.\-]\d{1,2}\s*[~∼]|\d{4}년)/.test(line) ||
       /^\s*undefined/.test(line);
     if (isNewEntry && currentEntry.trim()) {
       projectEntries.push(currentEntry.trim());

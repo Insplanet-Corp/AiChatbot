@@ -47,10 +47,17 @@ const extractJsonText = (raw: string): string => {
   }
 };
 
-// 잘린 JSON을 복구: 열린 bracket/brace를 역순으로 닫아줌
+// 잘린 JSON을 복구: 잘못된 이스케이프를 교정하고, 열린 bracket/brace를 역순으로 닫아줌
 const repairTruncatedJson = (raw: string): string => {
-  const text = extractJsonText(raw);
+  let text = extractJsonText(raw);
 
+  try {
+    JSON.parse(text);
+    return text;
+  } catch {}
+
+  // LLM이 출력한 JSON 미허용 이스케이프(예: "\W", "\한")를 리터럴 백슬래시로 교정
+  text = text.replace(/\\(?!["\\/bfnrtu]|u[0-9a-fA-F]{4})/g, "\\\\");
   try {
     JSON.parse(text);
     return text;
@@ -172,7 +179,10 @@ const FILENAME_STOPWORDS = [
   "경력기술서", "자기소개서", "재직증명서", "경력증명서",
   "포트폴리오", "지원서", "이력서", "자소서", "경력", "이력",
   "국문", "영문", "최종", "수정", "사본", "제출", "양식",
-  "resume", "portfolio", "cv",
+  // 직군/문서 태그 (예: "프로필_웹기획_강재희.pdf" 에서 "웹기획"이 이름으로 오인되는 것 방지)
+  "프로필", "웹기획", "웹디자인", "웹퍼블리싱", "퍼블리셔",
+  "디자이너", "개발자", "기획자",
+  "resume", "portfolio", "profile", "cv",
 ];
 
 /**
@@ -263,6 +273,30 @@ const extractPhoneFromText = (text?: string): string | null => {
 // 프롬프트 few-shot 예시에 등장하는 더미 이름 — LLM 이 그대로 베껴오면 무효로 본다.
 const EXAMPLE_NAMES = new Set(["홍길동", "김도현", "박지은"]);
 
+// 프롬프트 few-shot 예시의 프로젝트/회사/학교 — LLM 이 베껴온 항목은 제거한다(이름 가드와 대칭).
+const EXAMPLE_PROJECT_NAMES = new Set([
+  "카카오페이 결제 모듈 고도화",
+  "사내 모니터링 대시보드 구축",
+  "삼성 브랜드 리뉴얼",
+]);
+const EXAMPLE_COMPANY_NAMES = new Set(["카카오(주)", "스타트업A", "디자인컴퍼니"]);
+const EXAMPLE_SCHOOL_NAMES = new Set(["한국대학교"]);
+
+const stripExampleEntries = (data: ResumeData): void => {
+  if (Array.isArray(data.projects))
+    data.projects = data.projects.filter(
+      (p) => !EXAMPLE_PROJECT_NAMES.has((p.project_name || "").trim()),
+    );
+  if (Array.isArray(data.work_experiences))
+    data.work_experiences = data.work_experiences.filter(
+      (w) => !EXAMPLE_COMPANY_NAMES.has((w.company_name || "").trim()),
+    );
+  if (Array.isArray(data.educations))
+    data.educations = data.educations.filter(
+      (e) => !EXAMPLE_SCHOOL_NAMES.has((e.school_name || "").trim()),
+    );
+};
+
 // 이력서가 아닌 인터뷰 문서(인터뷰 질의서/전화 인터뷰 등)를 저장 대상에서 제외하기 위한 키워드.
 // 공백을 제거(despace)한 형태로 비교하므로 "전화 인터뷰" / "전화인터뷰" 띄어쓰기 차이를 무시한다.
 // (scripts/seedResumesToDB.mjs 에도 동일 로직이 있으니 수정 시 함께 변경)
@@ -329,6 +363,9 @@ const parseAndSaveResume = async (file: File) => {
       );
       parsedData.projects = deduplicateProjects(chunkResults.flat());
     }
+
+    // few-shot 예시를 그대로 베껴온 프로젝트/경력/학력 항목 제거
+    stripExampleEntries(parsedData);
 
     // 이름: 파싱 결과 우선. 단 비어 있거나 프롬프트 예시 이름(홍길동 등)을 베껴온 경우는
     // 무효로 보고 파일명에서 추출한다. (에이전시 파일명이 더 신뢰도 높음)

@@ -29,6 +29,7 @@ import fs from "fs";
 import path from "path";
 import { fileURLToPath, pathToFileURL } from "url";
 import { createClient } from "@supabase/supabase-js";
+import { PROJECT_SECTION_PATTERN } from "./shared/patterns.mjs";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -124,6 +125,87 @@ const extractPdfTextViaOcr = async (pdf) => {
   }
 };
 
+// 좌표 기반 마크다운형 구조 재구성 (src/utils/fileParser.ts 의 reconstructPdfPageText 동기화)
+const reconstructPdfPageText = (textContent) => {
+  const items = textContent.items
+    .filter((it) => it.str && it.str.trim())
+    .map((it) => ({
+      str: it.str,
+      x: it.transform[4],
+      y: it.transform[5],
+      w: it.width,
+      h: it.height || Math.abs(it.transform[3]) || 10,
+    }));
+  if (items.length === 0) return "";
+
+  items.sort((a, b) => b.y - a.y || a.x - b.x);
+  const lines = [[items[0]]];
+  for (let i = 1; i < items.length; i++) {
+    const item = items[i];
+    const line = lines[lines.length - 1];
+    if (Math.abs(line[0].y - item.y) <= Math.max(item.h, line[0].h) * 0.5) line.push(item);
+    else lines.push([item]);
+  }
+
+  const avgH = items.reduce((sum, it) => sum + it.h, 0) / items.length;
+
+  // 각 줄을 셀 목록으로 변환 (수평 간격 1.5배 이상 = 열 경계)
+  const rows = lines.map((line) => {
+    line.sort((a, b) => a.x - b.x);
+    const cells = [];
+    let cur = null;
+    for (const it of line) {
+      if (cur && it.x - cur.end <= avgH * 1.5) {
+        const gap = it.x - cur.end;
+        const needSpace = gap > avgH * 0.15 && !cur.text.endsWith(" ") && !it.str.startsWith(" ");
+        cur.text += (needSpace ? " " : "") + it.str;
+        cur.end = it.x + it.w;
+      } else {
+        cur = { x: it.x, end: it.x + it.w, text: it.str };
+        cells.push(cur);
+      }
+    }
+    return { y: line[0].y, cells };
+  });
+
+  const joinWrapped = (a, b) =>
+    /[가-힣一-龥]$/.test(a) && /^[가-힣一-龥]/.test(b) ? a + b : `${a} ${b}`;
+
+  // 줄바꿈된 표 행 병합: (a) 세로 중앙정렬로 갈라진 줄(간격 < 0.8배) (b) 셀 텍스트 줄바꿈(정렬 + 간격 < 1.9배)
+  const merged = [];
+  for (const row of rows) {
+    const prev = merged[merged.length - 1];
+    const gap = prev !== undefined ? prev.y - row.y : Infinity;
+    const sameRow = prev !== undefined && prev.cells.length >= 2 && gap < avgH * 0.8;
+    const wrappedLine =
+      prev !== undefined &&
+      prev.cells.length >= 3 &&
+      row.cells.length >= 2 &&
+      row.cells.length <= prev.cells.length &&
+      gap < avgH * 1.9 &&
+      row.cells.every((c) => prev.cells.some((pc) => Math.abs(pc.x - c.x) < avgH));
+    if (sameRow || wrappedLine) {
+      for (const c of row.cells) {
+        const target = prev.cells.find((pc) => Math.abs(pc.x - c.x) < avgH);
+        if (target) target.text = joinWrapped(target.text, c.text);
+        else { prev.cells.push({ ...c }); prev.cells.sort((a, b) => a.x - b.x); }
+      }
+      prev.y = row.y;
+    } else {
+      merged.push(row);
+    }
+  }
+
+  let out = "";
+  let prevY = null;
+  for (const row of merged) {
+    if (prevY !== null && prevY - row.y > avgH * 2.2) out += "\n";
+    out += row.cells.map((c) => c.text.trim()).join(" | ") + "\n";
+    prevY = row.y;
+  }
+  return out.trim();
+};
+
 const extractPdfText = async (filePath) => {
   await loadPdfjs();
   const data = new Uint8Array(fs.readFileSync(filePath));
@@ -132,7 +214,7 @@ const extractPdfText = async (filePath) => {
   for (let i = 1; i <= pdf.numPages; i++) {
     const page = await pdf.getPage(i);
     const textContent = await page.getTextContent();
-    fullText += textContent.items.map((item) => item.str).join(" ") + "\n";
+    fullText += reconstructPdfPageText(textContent) + "\n\n";
   }
   fullText = fullText.trim();
   // 텍스트 레이어가 충분하면 그대로 사용(빠름). 너무 짧으면 이미지형/아웃라인 PDF 로 보고 OCR 폴백.
@@ -207,6 +289,7 @@ You are a high-performance resume data extraction engine. Your goal is COMPLETE 
    If the person covers multiple areas, pick the ONE that best describes their PRIMARY role.
 9. EDUCATION (NEVER EMPTY): "educations" must NEVER be an empty array.
    - Scan the full resume for education history. Priority order: 대학원 > 대학교 > fallback.
+   - Section headers may be in ENGLISH: "EDUCATION" = 학력, "WORK EXPERIENCE"/"CAREER" = 경력, "PROJECT" = 프로젝트, "SKILLS" = 보유기술. Treat them the same as Korean headers.
    - If 대학원 entries exist → include them (along with any 대학교 entries).
    - If no 대학원 but 대학교 entries exist → include those.
    - If NEITHER 대학원 NOR 대학교 is found anywhere in the resume → set educations to exactly:
@@ -323,13 +406,20 @@ RULES:
 4. Dates: YYYY-MM format. Use "현재" if ongoing.
 5. If client_company or role_and_tasks is missing from the text, use "" (empty string). NEVER use "undefined".
 6. tech_stack: extract any technology names mentioned in role_and_tasks. If none mentioned, use [].
-7. Do NOT include any key outside the schema above.`,
+7. Do NOT include any key outside the schema above.
+8. TABLE COLUMNS: rows may use " | " between cells. Map cells to header cells (수행기간 | 프로젝트명 | 고객사 | 담당업무) positionally.
+9. WRAPPED ROWS (CRITICAL): one table row may be SPLIT across two lines when cell text wraps — the first line has the start date ("2024.02 ~") and a following line begins with the end date only ("2024.09 | ..."). These lines are ONE project: merge them, joining fragmented cell text in reading order (e.g. "포인트 적립 시" + "스템 개편" → "포인트 적립 시스템 개편"). NEVER output a continuation line as a separate project.
+10. Ignore header lines and rows belonging to a following non-project section (자격증/수상/학력 등).`,
   },
   {
     role: "user",
     content: `[Project Section Text]
-2024.01 ~ 2024.06 카카오페이 결제 모듈 고도화 카카오 Spring Boot, Redis, Kafka로 개발. 결제 처리량 2배 향상.
-2023.03 ~ 2023.09 사내 모니터링 대시보드 구축 카카오 Grafana, Prometheus, Kubernetes로 구축. 야간 장애 대응 90% 감소.`,
+수행기간 | 프로젝트명 | 고객사 | 담당업무
+2024.01 ~ | 카카오페이 결제 모 | 카카오 | Spring Boot, Redis, Kafka로 개발. 결제 처리
+2024.06 | 듈 고도화 | 량 2배 향상.
+2023.03 ~ 2023.09 | 사내 모니터링 대시보드 구축 | 카카오 | Grafana, Prometheus, Kubernetes로 구축. 야간 장애 대응 90% 감소.
+자격증
+정보처리기사 | 한국산업인력공단 | 2014.11`,
   },
   {
     role: "assistant",
@@ -346,8 +436,7 @@ Extract ALL projects above as a JSON array. Do not skip any entry. Empty fields 
 
 // 알려진 섹션 헤더로 텍스트를 base / 프로젝트 청크로 분리
 const splitResumeIntoSections = (text) => {
-  const projectSectionPattern = /(?:수상경력|프로젝트\s*수행\s*경력|프로젝트\s*이력|수행\s*경력|PROJECT)/i;
-  const matchIdx = text.search(projectSectionPattern);
+  const matchIdx = text.search(PROJECT_SECTION_PATTERN);
 
   if (matchIdx === -1) return { base: text, projectChunks: [] };
 
@@ -359,7 +448,8 @@ const splitResumeIntoSections = (text) => {
   let current = "";
 
   for (const line of lines) {
-    const isNew = /^\s*(\d{4}[.\-]\d{2}|\d{4}년)/.test(line) || /^\s*undefined/.test(line);
+    // 날짜 "범위 시작"(~ 포함)만 새 항목으로 감지 — 줄바꿈된 표 셀의 종료일 줄 오인 방지
+    const isNew = /^\s*(\d{4}[.\-]\d{1,2}\s*[~∼]|\d{4}년)/.test(line) || /^\s*undefined/.test(line);
     if (isNew && current.trim()) {
       projectEntries.push(current.trim());
       current = line;
@@ -383,7 +473,8 @@ const splitResumeIntoSections = (text) => {
 //  Ollama 호출 (src/apis/ollama.ts 와 동일 동작 — keep_alive:-1 로 모델 상주)
 // ════════════════════════════════════════════════════════════════════════════
 // 배치(비대화형)라 앱(120s)보다 넉넉히 잡되, 모델이 멈추면 무한 대기하지 않도록 상한을 둔다.
-const CHAT_TIMEOUT_MS = 180_000;
+// (긴 이력서는 생성에 5분 이상 걸릴 수 있어 스트리밍 수신 + 600초 상한)
+const CHAT_TIMEOUT_MS = 600_000;
 const EMBEDDING_TIMEOUT_MS = 30_000;
 
 const LLM_OPTIONS = {
@@ -405,20 +496,36 @@ const fetchWithTimeout = async (url, init, timeoutMs, label) => {
   }
 };
 
+// stream:true 로 받아 조각을 이어붙인다.
+// (stream:false 는 생성이 끝나야 응답 헤더가 오는데, 긴 이력서는 Node fetch 의
+//  기본 헤더 타임아웃 300초에 걸려 "fetch failed"가 난다)
 const callOllama = async (messages) => {
   const res = await fetchWithTimeout(
     `${OLLAMA_URL}/api/chat`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ model: TEXT_MODEL, messages, stream: false, options: LLM_OPTIONS, keep_alive: -1 }),
+      body: JSON.stringify({ model: TEXT_MODEL, messages, stream: true, options: LLM_OPTIONS, keep_alive: -1 }),
     },
     CHAT_TIMEOUT_MS,
     `Ollama 채팅(${TEXT_MODEL})`,
   );
   if (!res.ok) throw new Error(`Ollama ${res.status}: ${await res.text()}`);
-  const result = await res.json();
-  return result.message.content;
+
+  const decoder = new TextDecoder();
+  let content = "";
+  let buf = "";
+  for await (const chunk of res.body) {
+    buf += decoder.decode(chunk, { stream: true });
+    let nl;
+    while ((nl = buf.indexOf("\n")) !== -1) {
+      const line = buf.slice(0, nl).trim();
+      buf = buf.slice(nl + 1);
+      if (line) content += JSON.parse(line).message?.content ?? "";
+    }
+  }
+  if (buf.trim()) content += JSON.parse(buf).message?.content ?? "";
+  return content;
 };
 
 const getEmbedding = async (text) => {
@@ -455,7 +562,11 @@ const extractJsonText = (raw) => {
 };
 
 const repairTruncatedJson = (raw) => {
-  const text = extractJsonText(raw);
+  let text = extractJsonText(raw);
+  try { JSON.parse(text); return text; } catch {}
+
+  // LLM이 출력한 JSON 미허용 이스케이프(예: "\W", "\한")를 리터럴 백슬래시로 교정
+  text = text.replace(/\\(?!["\\/bfnrtu]|u[0-9a-fA-F]{4})/g, "\\\\");
   try { JSON.parse(text); return text; } catch {}
 
   const stack = [];
@@ -523,7 +634,10 @@ const FILENAME_STOPWORDS = [
   "경력기술서", "자기소개서", "재직증명서", "경력증명서",
   "포트폴리오", "지원서", "이력서", "자소서", "경력", "이력",
   "국문", "영문", "최종", "수정", "사본", "제출", "양식",
-  "resume", "portfolio", "cv",
+  // 직군/문서 태그 (예: "프로필_웹기획_강재희.pdf" 에서 "웹기획"이 이름으로 오인되는 것 방지)
+  "프로필", "웹기획", "웹디자인", "웹퍼블리싱", "퍼블리셔",
+  "디자이너", "개발자", "기획자",
+  "resume", "portfolio", "profile", "cv",
 ];
 
 const extractGradeFromFilename = (filename) => {
@@ -592,6 +706,24 @@ const extractPhoneFromText = (text) => {
 // 프롬프트 few-shot 예시에 등장하는 더미 이름 — LLM 이 그대로 베껴오면 무효로 본다.
 // (src/services/resumeService.ts EXAMPLE_NAMES 와 동기화)
 const EXAMPLE_NAMES = new Set(["홍길동", "김도현", "박지은"]);
+
+// 프롬프트 few-shot 예시의 프로젝트/회사/학교 — LLM 이 베껴온 항목은 제거 (resumeService.ts 동기화)
+const EXAMPLE_PROJECT_NAMES = new Set([
+  "카카오페이 결제 모듈 고도화",
+  "사내 모니터링 대시보드 구축",
+  "삼성 브랜드 리뉴얼",
+]);
+const EXAMPLE_COMPANY_NAMES = new Set(["카카오(주)", "스타트업A", "디자인컴퍼니"]);
+const EXAMPLE_SCHOOL_NAMES = new Set(["한국대학교"]);
+
+const stripExampleEntries = (data) => {
+  if (Array.isArray(data.projects))
+    data.projects = data.projects.filter((p) => !EXAMPLE_PROJECT_NAMES.has((p.project_name || "").trim()));
+  if (Array.isArray(data.work_experiences))
+    data.work_experiences = data.work_experiences.filter((w) => !EXAMPLE_COMPANY_NAMES.has((w.company_name || "").trim()));
+  if (Array.isArray(data.educations))
+    data.educations = data.educations.filter((e) => !EXAMPLE_SCHOOL_NAMES.has((e.school_name || "").trim()));
+};
 
 // 인터뷰 문서(이력서 아님) 판별 (src/services/resumeService.ts isInterviewDocument 와 동기화)
 // 파일명 전체 + 본문 상단(제목 영역)을 공백 무시하고 키워드와 대조. 본문 상단만 보아 오제외 방지.
@@ -905,6 +1037,8 @@ const parseResumeFile = async (filePath) => {
     );
     parsedData.projects = deduplicateProjects(chunkResults.flat());
   }
+  // few-shot 예시를 그대로 베껴온 프로젝트/경력/학력 항목 제거
+  stripExampleEntries(parsedData);
   console.log("완료");
 
   // 3. 이름/등급 보강. 파싱값 우선이되, 비었거나 예시 이름(홍길동 등)을 베껴온 경우는
