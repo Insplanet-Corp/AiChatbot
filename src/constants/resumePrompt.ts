@@ -113,6 +113,7 @@ You are a high-performance resume data extraction engine. Your goal is COMPLETE 
 
 [FIELD FORMAT & EMPTY-VALUE RULES — put the RIGHT value in the RIGHT field, and leave absent values empty]
 - EMPTY MEANS ABSENT: If a value is NOT clearly present in the resume, output "" (empty string). NEVER guess, infer, fabricate, or copy a label/placeholder. Forbidden placeholder values: "XX", "YYYY", "YYYY.MM.DD", "0000", "미상", "해당없음", "없음", "N/A".
+- name: extract the actual person's name from THIS resume only. Korean names may be spaced syllable-by-syllable ("홍 길 동" → "홍길동"). The names used in the few-shot examples are ILLUSTRATIVE ONLY — NEVER output an example name. If the resume contains no name, output "".
 - phone: a Korean phone number formatted as 010-0000-0000 (digits joined by hyphens). Put ONLY a phone number here — never an email, address, or experience text. If absent, "".
 - email: copy the exact email address as written (e.g. hong@example.com). Put ONLY an email here. If absent, "".
 - gender: EXACTLY "남" or "여". Map 남자/남성/男 → "남"; 여자/여성/女 → "여". If absent, "".
@@ -141,7 +142,7 @@ const RESUME_PARSER_MESSAGES = (resumeContent: string) => [
 (Schema omitted for brevity)
 
 [Resume Content]
-이름: 홍길동 생년월일 1990.01.01 성별 男 연락처 010-1234-5678 이메일 hong@example.com
+이름: 김도현 생년월일 1990.01.01 성별 男 연락처 010-1234-5678 이메일 hong@example.com
 학교명 및 전공 재학기간 구분 한국대학교 컴퓨터공학과 2009.03 ~ 2013.02 졸업
 근무기간 회사명 부서명 직위 담당업무
 2020.03 ~ 현재 카카오(주) 서버개발팀 선임 Java/Spring Boot 기반 REST API 설계 및 개발, MySQL·Redis 캐싱 구조 설계, AWS ECS 배포 자동화, API 응답속도 35% 개선, 코드 리뷰 문화 도입으로 버그 발생률 50% 감소
@@ -153,7 +154,7 @@ const RESUME_PARSER_MESSAGES = (resumeContent: string) => [
   {
     role: "assistant",
     content: `{
-  "personal_info": { "name": "홍길동", "email": "hong@example.com", "phone": "010-1234-5678", "birth_date": "1990-01-01", "gender": "남", "address": "", "profile_image_url": "" },
+  "personal_info": { "name": "김도현", "email": "hong@example.com", "phone": "010-1234-5678", "birth_date": "1990-01-01", "gender": "남", "address": "", "profile_image_url": "" },
   "professional_summary": {
     "job_category": "개발",
     "current_role": "백엔드 개발자",
@@ -234,7 +235,7 @@ const RESUME_PARSER_MESSAGES = (resumeContent: string) => [
     content: `[Resume Content]
 PROFILE
 성명
-홍 길 동
+박 지 은
 담당업무
 디자인
 생년월일
@@ -263,7 +264,7 @@ Figma, Photoshop, Illustrator, HTML/CSS
   },
   {
     role: "assistant",
-    content: `{"personal_info":{"name":"홍길동","email":"","phone":"","birth_date":"1990-01-01","gender":"남","address":"서울특별시 강남구","profile_image_url":""},"professional_summary":{"job_category":"디자인","current_role":"브랜드/UIUX 디자이너","total_experience_months":96,"skill_grade":"고급","major_achievement":"삼성 브랜드 리뉴얼 메인 UI 디자인 및 디자인시스템 구축","core_competencies":["브랜드 아이덴티티 디자인","UI/UX 디자인","디자인시스템 구축"],"introduction":"","desired_position":"","desired_salary":""},"evaluation":{"one_line_review":"브랜드와 UI/UX를 아우르는 고급 디자이너"},"skills":[{"skill_name":"Figma","proficiency_level":"상","notes":""},{"skill_name":"Photoshop","proficiency_level":"상","notes":""},{"skill_name":"Illustrator","proficiency_level":"상","notes":""},{"skill_name":"HTML/CSS","proficiency_level":"중","notes":""}],"work_experiences":[{"start_date":"2016-03","end_date":"현재","company_name":"디자인컴퍼니","department":"브랜드디자인팀","job_title":"팀장","responsibilities":"브랜드 아이덴티티 및 UI/UX 디자인 총괄","tech_stack":["Figma"],"key_achievements":[]}],"projects":[{"start_date":"2024-01","end_date":"2024-06","project_name":"삼성 브랜드 리뉴얼","client_company":"삼성전자","role_and_tasks":"메인 UI 디자인 및 디자인시스템 구축","tech_stack":["Figma"],"outcomes":"사용성 평가 20% 개선","scale":""}],"educations":[{"start_date":"2009-03","end_date":"2013-02","school_name":"한국대학교","major":"시각디자인","graduation_status":"졸업"}],"certifications":[],"languages":[],"awards":[]}`,
+    content: `{"personal_info":{"name":"박지은","email":"","phone":"","birth_date":"1990-01-01","gender":"남","address":"서울특별시 강남구","profile_image_url":""},"professional_summary":{"job_category":"디자인","current_role":"브랜드/UIUX 디자이너","total_experience_months":96,"skill_grade":"고급","major_achievement":"삼성 브랜드 리뉴얼 메인 UI 디자인 및 디자인시스템 구축","core_competencies":["브랜드 아이덴티티 디자인","UI/UX 디자인","디자인시스템 구축"],"introduction":"","desired_position":"","desired_salary":""},"evaluation":{"one_line_review":"브랜드와 UI/UX를 아우르는 고급 디자이너"},"skills":[{"skill_name":"Figma","proficiency_level":"상","notes":""},{"skill_name":"Photoshop","proficiency_level":"상","notes":""},{"skill_name":"Illustrator","proficiency_level":"상","notes":""},{"skill_name":"HTML/CSS","proficiency_level":"중","notes":""}],"work_experiences":[{"start_date":"2016-03","end_date":"현재","company_name":"디자인컴퍼니","department":"브랜드디자인팀","job_title":"팀장","responsibilities":"브랜드 아이덴티티 및 UI/UX 디자인 총괄","tech_stack":["Figma"],"key_achievements":[]}],"projects":[{"start_date":"2024-01","end_date":"2024-06","project_name":"삼성 브랜드 리뉴얼","client_company":"삼성전자","role_and_tasks":"메인 UI 디자인 및 디자인시스템 구축","tech_stack":["Figma"],"outcomes":"사용성 평가 20% 개선","scale":""}],"educations":[{"start_date":"2009-03","end_date":"2013-02","school_name":"한국대학교","major":"시각디자인","graduation_status":"졸업"}],"certifications":[],"languages":[],"awards":[]}`,
   },
   {
     role: "user",

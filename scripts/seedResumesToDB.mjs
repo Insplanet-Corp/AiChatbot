@@ -188,6 +188,7 @@ You are a high-performance resume data extraction engine. Your goal is COMPLETE 
 
 [FIELD FORMAT & EMPTY-VALUE RULES — put the RIGHT value in the RIGHT field, and leave absent values empty]
 - EMPTY MEANS ABSENT: If a value is NOT clearly present in the resume, output "" (empty string). NEVER guess, infer, fabricate, or copy a label/placeholder. Forbidden placeholder values: "XX", "YYYY", "YYYY.MM.DD", "0000", "미상", "해당없음", "없음", "N/A".
+- name: extract the actual person's name from THIS resume only. Korean names may be spaced syllable-by-syllable ("홍 길 동" → "홍길동"). The names used in the few-shot examples are ILLUSTRATIVE ONLY — NEVER output an example name. If the resume contains no name, output "".
 - phone: a Korean phone number formatted as 010-0000-0000 (digits joined by hyphens). Put ONLY a phone number here — never an email, address, or experience text. If absent, "".
 - email: copy the exact email address as written (e.g. hong@example.com). Put ONLY an email here. If absent, "".
 - gender: EXACTLY "남" or "여". Map 남자/남성/男 → "남"; 여자/여성/女 → "여". If absent, "".
@@ -213,7 +214,7 @@ const RESUME_PARSER_MESSAGES = (resumeContent) => [
 (Schema omitted for brevity)
 
 [Resume Content]
-이름: 홍길동 생년월일 1990.01.01 성별 男 연락처 010-1234-5678 이메일 hong@example.com
+이름: 김도현 생년월일 1990.01.01 성별 男 연락처 010-1234-5678 이메일 hong@example.com
 학교명 및 전공 재학기간 구분 한국대학교 컴퓨터공학과 2009.03 ~ 2013.02 졸업
 근무기간 회사명 부서명 직위 담당업무
 2020.03 ~ 현재 카카오(주) 서버개발팀 선임 Java/Spring Boot 기반 REST API 설계 및 개발, MySQL·Redis 캐싱 구조 설계, AWS ECS 배포 자동화, API 응답속도 35% 개선, 코드 리뷰 문화 도입으로 버그 발생률 50% 감소
@@ -224,14 +225,14 @@ const RESUME_PARSER_MESSAGES = (resumeContent) => [
   },
   {
     role: "assistant",
-    content: `{"personal_info":{"name":"홍길동","email":"hong@example.com","phone":"010-1234-5678","birth_date":"1990-01-01","gender":"남","address":"","profile_image_url":""},"professional_summary":{"job_category":"개발","current_role":"백엔드 개발자","total_experience_months":96,"skill_grade":"고급","major_achievement":"카카오 결제 모듈 고도화로 처리량 2배 향상 및 API 응답속도 35% 개선","core_competencies":["Spring Boot 기반 REST API 설계","AWS 클라우드 운영","대용량 트래픽 처리","Redis 캐싱 설계"],"introduction":"카카오 출신 고급 백엔드 개발자로, 대용량 트래픽 처리와 시스템 성능 최적화에 강점이 있습니다.","desired_position":"","desired_salary":""},"evaluation":{"one_line_review":"카카오 출신 고급 백엔드 개발자로 대용량 시스템 설계와 성능 개선 경험이 풍부합니다."},"skills":[{"skill_name":"Java","proficiency_level":"상","notes":""},{"skill_name":"Spring Boot","proficiency_level":"상","notes":""},{"skill_name":"MySQL","proficiency_level":"상","notes":""},{"skill_name":"Redis","proficiency_level":"상","notes":""},{"skill_name":"AWS","proficiency_level":"중","notes":""}],"work_experiences":[{"start_date":"2020-03","end_date":"현재","company_name":"카카오(주)","department":"서버개발팀","job_title":"선임","responsibilities":"Java/Spring Boot 기반 REST API 설계 및 개발, MySQL·Redis 캐싱 구조 설계, AWS ECS 배포 자동화, 코드 리뷰 문화 도입","tech_stack":["Java","Spring Boot","MySQL","Redis","AWS","AWS ECS"],"key_achievements":["API 응답속도 35% 개선","코드 리뷰 문화 도입으로 버그 발생률 50% 감소"]},{"start_date":"2017-01","end_date":"2020-02","company_name":"스타트업A","department":"개발팀","job_title":"사원","responsibilities":"Node.js/Express 백엔드 개발, MongoDB 설계, React 프론트 일부 담당","tech_stack":["Node.js","Express","MongoDB","React"],"key_achievements":["하루 10만 건 주문 처리 시스템 구축"]}],"projects":[{"start_date":"2024-01","end_date":"2024-06","project_name":"카카오페이 결제 모듈 고도화","client_company":"카카오","role_and_tasks":"Spring Boot, Redis, Kafka 활용한 결제 모듈 고도화 개발","tech_stack":["Spring Boot","Redis","Kafka"],"outcomes":"결제 처리량 2배 향상, 장애 대응 시간 60% 단축","scale":"팀 5인"},{"start_date":"2023-03","end_date":"2023-09","project_name":"사내 모니터링 대시보드 구축","client_company":"카카오","role_and_tasks":"Grafana, Prometheus, Kubernetes 기반 실시간 모니터링 시스템 개발","tech_stack":["Grafana","Prometheus","Kubernetes"],"outcomes":"온콜 알람 자동화로 야간 장애 대응 90% 감소","scale":""}],"educations":[{"start_date":"2009-03","end_date":"2013-02","school_name":"한국대학교","major":"컴퓨터공학과","graduation_status":"졸업"}],"certifications":[],"languages":[],"awards":[]}`,
+    content: `{"personal_info":{"name":"김도현","email":"hong@example.com","phone":"010-1234-5678","birth_date":"1990-01-01","gender":"남","address":"","profile_image_url":""},"professional_summary":{"job_category":"개발","current_role":"백엔드 개발자","total_experience_months":96,"skill_grade":"고급","major_achievement":"카카오 결제 모듈 고도화로 처리량 2배 향상 및 API 응답속도 35% 개선","core_competencies":["Spring Boot 기반 REST API 설계","AWS 클라우드 운영","대용량 트래픽 처리","Redis 캐싱 설계"],"introduction":"카카오 출신 고급 백엔드 개발자로, 대용량 트래픽 처리와 시스템 성능 최적화에 강점이 있습니다.","desired_position":"","desired_salary":""},"evaluation":{"one_line_review":"카카오 출신 고급 백엔드 개발자로 대용량 시스템 설계와 성능 개선 경험이 풍부합니다."},"skills":[{"skill_name":"Java","proficiency_level":"상","notes":""},{"skill_name":"Spring Boot","proficiency_level":"상","notes":""},{"skill_name":"MySQL","proficiency_level":"상","notes":""},{"skill_name":"Redis","proficiency_level":"상","notes":""},{"skill_name":"AWS","proficiency_level":"중","notes":""}],"work_experiences":[{"start_date":"2020-03","end_date":"현재","company_name":"카카오(주)","department":"서버개발팀","job_title":"선임","responsibilities":"Java/Spring Boot 기반 REST API 설계 및 개발, MySQL·Redis 캐싱 구조 설계, AWS ECS 배포 자동화, 코드 리뷰 문화 도입","tech_stack":["Java","Spring Boot","MySQL","Redis","AWS","AWS ECS"],"key_achievements":["API 응답속도 35% 개선","코드 리뷰 문화 도입으로 버그 발생률 50% 감소"]},{"start_date":"2017-01","end_date":"2020-02","company_name":"스타트업A","department":"개발팀","job_title":"사원","responsibilities":"Node.js/Express 백엔드 개발, MongoDB 설계, React 프론트 일부 담당","tech_stack":["Node.js","Express","MongoDB","React"],"key_achievements":["하루 10만 건 주문 처리 시스템 구축"]}],"projects":[{"start_date":"2024-01","end_date":"2024-06","project_name":"카카오페이 결제 모듈 고도화","client_company":"카카오","role_and_tasks":"Spring Boot, Redis, Kafka 활용한 결제 모듈 고도화 개발","tech_stack":["Spring Boot","Redis","Kafka"],"outcomes":"결제 처리량 2배 향상, 장애 대응 시간 60% 단축","scale":"팀 5인"},{"start_date":"2023-03","end_date":"2023-09","project_name":"사내 모니터링 대시보드 구축","client_company":"카카오","role_and_tasks":"Grafana, Prometheus, Kubernetes 기반 실시간 모니터링 시스템 개발","tech_stack":["Grafana","Prometheus","Kubernetes"],"outcomes":"온콜 알람 자동화로 야간 장애 대응 90% 감소","scale":""}],"educations":[{"start_date":"2009-03","end_date":"2013-02","school_name":"한국대학교","major":"컴퓨터공학과","graduation_status":"졸업"}],"certifications":[],"languages":[],"awards":[]}`,
   },
   {
     role: "user",
     content: `[Resume Content]
 PROFILE
 성명
-홍 길 동
+박 지 은
 담당업무
 디자인
 생년월일
@@ -260,7 +261,7 @@ Figma, Photoshop, Illustrator, HTML/CSS
   },
   {
     role: "assistant",
-    content: `{"personal_info":{"name":"홍길동","email":"","phone":"","birth_date":"1990-01-01","gender":"남","address":"서울특별시 강남구","profile_image_url":""},"professional_summary":{"job_category":"디자인","current_role":"브랜드/UIUX 디자이너","total_experience_months":96,"skill_grade":"고급","major_achievement":"삼성 브랜드 리뉴얼 메인 UI 디자인 및 디자인시스템 구축","core_competencies":["브랜드 아이덴티티 디자인","UI/UX 디자인","디자인시스템 구축"],"introduction":"","desired_position":"","desired_salary":""},"evaluation":{"one_line_review":"브랜드와 UI/UX를 아우르는 고급 디자이너"},"skills":[{"skill_name":"Figma","proficiency_level":"상","notes":""},{"skill_name":"Photoshop","proficiency_level":"상","notes":""},{"skill_name":"Illustrator","proficiency_level":"상","notes":""},{"skill_name":"HTML/CSS","proficiency_level":"중","notes":""}],"work_experiences":[{"start_date":"2016-03","end_date":"현재","company_name":"디자인컴퍼니","department":"브랜드디자인팀","job_title":"팀장","responsibilities":"브랜드 아이덴티티 및 UI/UX 디자인 총괄","tech_stack":["Figma"],"key_achievements":[]}],"projects":[{"start_date":"2024-01","end_date":"2024-06","project_name":"삼성 브랜드 리뉴얼","client_company":"삼성전자","role_and_tasks":"메인 UI 디자인 및 디자인시스템 구축","tech_stack":["Figma"],"outcomes":"사용성 평가 20% 개선","scale":""}],"educations":[{"start_date":"2009-03","end_date":"2013-02","school_name":"한국대학교","major":"시각디자인","graduation_status":"졸업"}],"certifications":[],"languages":[],"awards":[]}`,
+    content: `{"personal_info":{"name":"박지은","email":"","phone":"","birth_date":"1990-01-01","gender":"남","address":"서울특별시 강남구","profile_image_url":""},"professional_summary":{"job_category":"디자인","current_role":"브랜드/UIUX 디자이너","total_experience_months":96,"skill_grade":"고급","major_achievement":"삼성 브랜드 리뉴얼 메인 UI 디자인 및 디자인시스템 구축","core_competencies":["브랜드 아이덴티티 디자인","UI/UX 디자인","디자인시스템 구축"],"introduction":"","desired_position":"","desired_salary":""},"evaluation":{"one_line_review":"브랜드와 UI/UX를 아우르는 고급 디자이너"},"skills":[{"skill_name":"Figma","proficiency_level":"상","notes":""},{"skill_name":"Photoshop","proficiency_level":"상","notes":""},{"skill_name":"Illustrator","proficiency_level":"상","notes":""},{"skill_name":"HTML/CSS","proficiency_level":"중","notes":""}],"work_experiences":[{"start_date":"2016-03","end_date":"현재","company_name":"디자인컴퍼니","department":"브랜드디자인팀","job_title":"팀장","responsibilities":"브랜드 아이덴티티 및 UI/UX 디자인 총괄","tech_stack":["Figma"],"key_achievements":[]}],"projects":[{"start_date":"2024-01","end_date":"2024-06","project_name":"삼성 브랜드 리뉴얼","client_company":"삼성전자","role_and_tasks":"메인 UI 디자인 및 디자인시스템 구축","tech_stack":["Figma"],"outcomes":"사용성 평가 20% 개선","scale":""}],"educations":[{"start_date":"2009-03","end_date":"2013-02","school_name":"한국대학교","major":"시각디자인","graduation_status":"졸업"}],"certifications":[],"languages":[],"awards":[]}`,
   },
   {
     role: "user",
@@ -539,6 +540,24 @@ const extractEmailFromText = (text) => {
   const despaced = text.replace(/\s*([@.])\s*/g, "$1");
   return despaced.match(EMAIL_REGEX)?.[0] ?? null;
 };
+
+// 휴대폰 추출 (src/services/resumeService.ts extractPhoneFromText 와 동기화)
+// 01X-XXXX-XXXX(구분자 유연, +82 선택). LLM 누락 시 원문에서 보강(이메일과 대칭).
+const PHONE_REGEX = /(?:\+?82[-.\s]?)?0?1[016789][-.\s]?\d{3,4}[-.\s]?\d{4}/;
+
+const extractPhoneFromText = (text) => {
+  if (!text) return null;
+  const direct = text.match(PHONE_REGEX)?.[0];
+  if (direct) return direct;
+  const labeled = text.match(
+    /(?:연락처|휴대폰|핸드폰|전화|mobile|tel|h\.?p)[^\d]{0,6}((?:\d[\s.\-]?){9,13})/i,
+  );
+  return labeled?.[1] ?? null;
+};
+
+// 프롬프트 few-shot 예시에 등장하는 더미 이름 — LLM 이 그대로 베껴오면 무효로 본다.
+// (src/services/resumeService.ts EXAMPLE_NAMES 와 동기화)
+const EXAMPLE_NAMES = new Set(["홍길동", "김도현", "박지은"]);
 
 // 인터뷰 문서(이력서 아님) 판별 (src/services/resumeService.ts isInterviewDocument 와 동기화)
 // 파일명 전체 + 본문 상단(제목 영역)을 공백 무시하고 키워드와 대조. 본문 상단만 보아 오제외 방지.
@@ -853,15 +872,27 @@ const parseResumeFile = async (filePath) => {
   }
   console.log("완료");
 
-  // 3. 이름/등급 보강 (파싱값 우선, 없으면 파일명)
-  const parsedName = parsedData.personal_info?.name?.replace(/\s+/g, "");
+  // 3. 이름/등급 보강. 파싱값 우선이되, 비었거나 예시 이름(홍길동 등)을 베껴온 경우는
+  //    무효로 보고 파일명에서 추출한다. (에이전시 파일명이 더 신뢰도 높음)
+  const rawName = parsedData.personal_info?.name?.replace(/\s+/g, "");
+  const parsedName = rawName && !EXAMPLE_NAMES.has(rawName) ? rawName : null;
   const nameFromFile = parsedName ? null : extractNameFromFilename(filename);
-  if (nameFromFile) parsedData.personal_info = { ...parsedData.personal_info, name: nameFromFile };
+  parsedData.personal_info = {
+    ...parsedData.personal_info,
+    name: parsedName ?? nameFromFile ?? "", // 정규화 후 ""→"이름없음" 으로 저장
+  };
 
-  // 이메일 누락 방지: 파싱값 우선(정규화), 없으면 원문 전체에서 정규식으로 추출해 보강
-  const emailFromParsed = extractEmailFromText(parsedData.personal_info?.email ?? "");
-  const finalEmail = emailFromParsed ?? extractEmailFromText(extractedText);
+  // 이메일 누락 방지: 파싱값 우선, 없으면 원문에서 보강. 예시값(@example.com)은 무시.
+  const parsedEmail = extractEmailFromText(parsedData.personal_info?.email ?? "");
+  const cleanParsedEmail = parsedEmail && !/@example\.com$/i.test(parsedEmail) ? parsedEmail : null;
+  const finalEmail = cleanParsedEmail ?? extractEmailFromText(extractedText);
   if (finalEmail) parsedData.personal_info = { ...parsedData.personal_info, email: finalEmail };
+
+  // 전화 누락 방지: 파싱값 우선, 없으면 원문에서 보강(이메일과 대칭). 예시번호(010-1234-5678)는 무시.
+  const parsedPhone = extractPhoneFromText(parsedData.personal_info?.phone ?? "");
+  const cleanParsedPhone = parsedPhone && parsedPhone.replace(/\D/g, "") !== "01012345678" ? parsedPhone : null;
+  const finalPhone = cleanParsedPhone ?? extractPhoneFromText(extractedText);
+  if (finalPhone) parsedData.personal_info = { ...parsedData.personal_info, phone: finalPhone };
 
   const gradeFromFile = extractGradeFromFilename(filename);
   if (gradeFromFile) parsedData.file_grade = gradeFromFile;

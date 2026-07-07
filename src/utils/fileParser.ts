@@ -2,9 +2,37 @@ import * as mammoth from "mammoth";
 import * as XLSX from "xlsx";
 import * as pdfjsLib from "pdfjs-dist";
 import pdfWorkerUrl from "pdfjs-dist/build/pdf.worker.mjs?url";
-import { extractPdfTextViaVision } from "./pdfVisionOcr";
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
+
+// 이미지형(스캔) PDF 폴백 OCR: 각 페이지를 canvas 로 렌더해 Tesseract.js(WASM)로 인식한다.
+// GPU/Ollama 를 쓰지 않으므로 gemma↔qwen 모델 스왑 없이 브라우저에서 바로 동작한다.
+// 언어 데이터(kor/eng)는 기본 CDN(jsDelivr)에서 받는다 — 외부망 차단(오프라인) 환경이면
+// createWorker 에 { langPath, corePath, workerPath } 로 로컬 호스팅 경로를 지정해야 한다.
+// (대부분의 PDF 는 텍스트 레이어가 있어 OCR 을 타지 않으므로 tesseract.js 는 동적 import 한다.)
+const extractPdfTextViaOcr = async (pdf: any): Promise<string> => {
+  const { createWorker } = await import("tesseract.js");
+  const worker = await createWorker("kor+eng");
+  try {
+    let ocrText = "";
+    for (let i = 1; i <= pdf.numPages; i++) {
+      const page = await pdf.getPage(i);
+      const viewport = page.getViewport({ scale: 2.5 }); // 해상도 ↑ → 한글 인식률 ↑
+      const canvas = document.createElement("canvas");
+      canvas.width = viewport.width;
+      canvas.height = viewport.height;
+      const context = canvas.getContext("2d");
+      if (!context) continue;
+      await page.render({ canvasContext: context, viewport }).promise;
+      const { data } = await worker.recognize(canvas);
+      ocrText += data.text + "\n";
+      canvas.width = canvas.height = 0; // 캔버스 메모리 즉시 해제
+    }
+    return ocrText.trim();
+  } finally {
+    await worker.terminate();
+  }
+};
 
 const extractTextFromFile = async (file: File): Promise<string> => {
   const extension = file.name.split(".").pop()?.toLowerCase();
@@ -22,11 +50,18 @@ const extractTextFromFile = async (file: File): Promise<string> => {
           textContent.items.map((item: any) => item.str).join(" ") + "\n";
       }
       fullText = fullText.trim();
-      if (fullText) return fullText;
+      // 텍스트 레이어가 충분하면 그대로 사용(빠름). 너무 짧으면 이미지형으로 보고 OCR 폴백.
+      if (fullText.length >= 100) return fullText;
 
-      // 텍스트 레이어가 없는 이미지형 PDF → 비전 LLM OCR 폴백
-      console.warn("[PDF] 텍스트 레이어 없음 → 비전 OCR 폴백 실행");
-      return await extractPdfTextViaVision(file);
+      // 이미지형(스캔) PDF → Tesseract.js OCR (GPU/모델 스왑 불필요). 더 풍부한 쪽을 채택.
+      const ocrText = await extractPdfTextViaOcr(pdf);
+      const best = ocrText.length > fullText.length ? ocrText : fullText;
+      if (best) return best;
+
+      // OCR 까지 했는데도 글자가 전혀 안 나오는 PDF(빈 파일/극저화질 스캔)
+      throw new Error(
+        "PDF에서 텍스트를 읽을 수 없습니다. 스캔 품질이 낮거나 빈 PDF일 수 있습니다. 더 선명한 파일 또는 .docx 형식으로 변환 후 업로드해 주세요.",
+      );
     }
 
     if (extension === "docx") {

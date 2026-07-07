@@ -242,6 +242,27 @@ const extractEmailFromText = (text: string): string | null => {
   return despaced.match(EMAIL_REGEX)?.[0] ?? null;
 };
 
+// 휴대폰 정규식: 01X-XXXX-XXXX (구분자 하이픈/점/공백 허용, 국가코드 +82 선택).
+const PHONE_REGEX = /(?:\+?82[-.\s]?)?0?1[016789][-.\s]?\d{3,4}[-.\s]?\d{4}/;
+
+/**
+ * 이력서 평문에서 휴대폰 번호를 추출. 찾지 못하면 null.
+ * LLM 이 전화번호를 누락하더라도 텍스트에 번호 형식이 있으면 저장하기 위한 폴백(이메일과 대칭).
+ * 1) 휴대폰 패턴 직접 매칭 → 2) "연락처/휴대폰/HP" 라벨 뒤 숫자열(구분자 깨진 PDF 대비).
+ */
+const extractPhoneFromText = (text?: string): string | null => {
+  if (!text) return null;
+  const direct = text.match(PHONE_REGEX)?.[0];
+  if (direct) return direct;
+  const labeled = text.match(
+    /(?:연락처|휴대폰|핸드폰|전화|mobile|tel|h\.?p)[^\d]{0,6}((?:\d[\s.\-]?){9,13})/i,
+  );
+  return labeled?.[1] ?? null;
+};
+
+// 프롬프트 few-shot 예시에 등장하는 더미 이름 — LLM 이 그대로 베껴오면 무효로 본다.
+const EXAMPLE_NAMES = new Set(["홍길동", "김도현", "박지은"]);
+
 // 이력서가 아닌 인터뷰 문서(인터뷰 질의서/전화 인터뷰 등)를 저장 대상에서 제외하기 위한 키워드.
 // 공백을 제거(despace)한 형태로 비교하므로 "전화 인터뷰" / "전화인터뷰" 띄어쓰기 차이를 무시한다.
 // (scripts/seedResumesToDB.mjs 에도 동일 로직이 있으니 수정 시 함께 변경)
@@ -309,21 +330,35 @@ const parseAndSaveResume = async (file: File) => {
       parsedData.projects = deduplicateProjects(chunkResults.flat());
     }
 
-    // 이름: 파싱 결과 우선, 비어 있으면 파일명에서 추출
-    const parsedName = parsedData.personal_info?.name?.replace(/\s+/g, "");
+    // 이름: 파싱 결과 우선. 단 비어 있거나 프롬프트 예시 이름(홍길동 등)을 베껴온 경우는
+    // 무효로 보고 파일명에서 추출한다. (에이전시 파일명이 더 신뢰도 높음)
+    const rawName = parsedData.personal_info?.name?.replace(/\s+/g, "");
+    const parsedName = rawName && !EXAMPLE_NAMES.has(rawName) ? rawName : null;
     const nameFromFile = parsedName ? null : extractNameFromFilename(file.name);
-    // 파일명으로 보강한 경우 parsedData 에도 반영 (컬럼 분해 시 함께 저장됨)
-    if (nameFromFile) {
-      parsedData.personal_info = { ...parsedData.personal_info, name: nameFromFile };
-    }
+    // 최종 이름: 유효 파싱값 → 파일명 → "" (정규화 후 "이름없음"으로 저장)
+    parsedData.personal_info = {
+      ...parsedData.personal_info,
+      name: parsedName ?? nameFromFile ?? "",
+    };
 
-    // 이메일 누락 방지: 파싱값에 이메일 형식이 있으면 그대로 사용,
-    // 없으면 원문 전체에서 정규식으로 추출해 보강한다.
-    // (이력서에 이메일 형식이 존재하면 무조건 저장되도록 보장)
-    const emailFromParsed = extractEmailFromText(parsedData.personal_info?.email ?? "");
-    const finalEmail = emailFromParsed ?? extractEmailFromText(extractedText);
+    // 이메일 누락 방지: 파싱값 우선, 없으면 원문 전체에서 정규식으로 보강한다.
+    // 단 예시값(@example.com)을 베껴온 경우는 무시하고 원문에서 다시 찾는다.
+    const parsedEmail = extractEmailFromText(parsedData.personal_info?.email ?? "");
+    const cleanParsedEmail =
+      parsedEmail && !/@example\.com$/i.test(parsedEmail) ? parsedEmail : null;
+    const finalEmail = cleanParsedEmail ?? extractEmailFromText(extractedText);
     if (finalEmail) {
       parsedData.personal_info = { ...parsedData.personal_info, email: finalEmail };
+    }
+
+    // 전화 누락 방지: 파싱값 우선, 없으면 원문에서 정규식으로 보강한다(이메일과 대칭).
+    // 단 예시 번호(010-1234-5678)를 베껴온 경우는 무시하고 원문에서 다시 찾는다.
+    const parsedPhone = extractPhoneFromText(parsedData.personal_info?.phone ?? "");
+    const cleanParsedPhone =
+      parsedPhone && parsedPhone.replace(/\D/g, "") !== "01012345678" ? parsedPhone : null;
+    const finalPhone = cleanParsedPhone ?? extractPhoneFromText(extractedText);
+    if (finalPhone) {
+      parsedData.personal_info = { ...parsedData.personal_info, phone: finalPhone };
     }
 
     const gradeFromFile = extractGradeFromFilename(file.name);

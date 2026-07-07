@@ -52,6 +52,8 @@ interface SearchFilters {
   intent: ChatIntent;
   category: JobCategory | null;
   grade: GradeLabel | null;
+  minExperienceYears: number | null;
+  maxExperienceYears: number | null;
   maxAge: number | null;
   minAge: number | null;
 }
@@ -72,6 +74,12 @@ const coerceGrade = (v: unknown): GradeLabel | null =>
 const coerceAge = (v: unknown): number | null => {
   const n = typeof v === "number" ? v : typeof v === "string" ? parseInt(v, 10) : NaN;
   return Number.isFinite(n) && n >= 10 && n <= 100 ? Math.trunc(n) : null;
+};
+
+// 경력 연차(년). 0~60 범위만 허용. (총경력은 total_experience_months 로 비교)
+const coerceExperienceYears = (v: unknown): number | null => {
+  const n = typeof v === "number" ? v : typeof v === "string" ? parseInt(v, 10) : NaN;
+  return Number.isFinite(n) && n >= 0 && n <= 60 ? Math.trunc(n) : null;
 };
 
 // ── 정규식 폴백: 라우터 LLM 호출/파싱이 실패해도 결정적 키워드 필터는 유지 ──
@@ -103,14 +111,42 @@ const fallbackAge = (message: string): { maxAge: number | null; minAge: number |
   };
 };
 
+// "N년 이상/이하" 형태의 경력 연차 조건. ('년차'만 있는 단순 연차는 범위가 아니므로 무시)
+const fallbackExperience = (
+  message: string,
+): { minExperienceYears: number | null; maxExperienceYears: number | null } => {
+  const min = message.match(/(\d{1,2})\s*년\s*(?:차)?\s*(?:이상|초과|넘)/);
+  const max = message.match(/(\d{1,2})\s*년\s*(?:차)?\s*(?:이하|미만|까지)/);
+  return {
+    minExperienceYears: min ? parseInt(min[1], 10) : null,
+    maxExperienceYears: max ? parseInt(max[1], 10) : null,
+  };
+};
+
 const fallbackFilters = (message: string): SearchFilters => {
   const grade = fallbackGrade(message);
   const category = fallbackCategory(message);
   const { maxAge, minAge } = fallbackAge(message);
+  const { minExperienceYears, maxExperienceYears } = fallbackExperience(message);
   // 키워드 신호가 하나라도 잡히면 검색 의도로 본다. 아무 신호도 없으면 기존 동작(실패 시
   // 'chat')을 유지해, LLM 다운 중 들어온 잡담을 검색으로 오인하지 않는다.
-  const hasSignal = !!(grade || category || maxAge !== null || minAge !== null);
-  return { intent: hasSignal ? "search" : "chat", category, grade, maxAge, minAge };
+  const hasSignal = !!(
+    grade ||
+    category ||
+    maxAge !== null ||
+    minAge !== null ||
+    minExperienceYears !== null ||
+    maxExperienceYears !== null
+  );
+  return {
+    intent: hasSignal ? "search" : "chat",
+    category,
+    grade,
+    minExperienceYears,
+    maxExperienceYears,
+    maxAge,
+    minAge,
+  };
 };
 
 const extractSearchFilters = async (message: string): Promise<SearchFilters> => {
@@ -127,6 +163,8 @@ const extractSearchFilters = async (message: string): Promise<SearchFilters> => 
       intent: parsed.intent === "search" ? "search" : "chat",
       category: coerceCategory(parsed.category),
       grade: coerceGrade(parsed.grade),
+      minExperienceYears: coerceExperienceYears(parsed.minExperienceYears),
+      maxExperienceYears: coerceExperienceYears(parsed.maxExperienceYears),
       maxAge: coerceAge(parsed.maxAge),
       minAge: coerceAge(parsed.minAge),
     };
@@ -217,17 +255,40 @@ const matchesAge = (
   return true;
 };
 
+// 경력 연차 하드 필터. total_experience_months(사실 기반 평문 컬럼)을 연 단위로 환산해 비교한다.
+// "10년 이상" → minYears=10 → 120개월 이상만 통과. 생년/등급과 동일하게 신뢰도가 높아 '제외'로 적용.
+const matchesExperience = (
+  months: number,
+  minYears: number | null,
+  maxYears: number | null,
+): boolean => {
+  if (minYears === null && maxYears === null) return true;
+  const years = months / 12;
+  if (minYears !== null && years < minYears) return false;
+  if (maxYears !== null && years > maxYears) return false;
+  return true;
+};
+
 const postChatWithSupabase = async (
   { message }: PostChatParams,
   filters: SearchFilters,
 ): Promise<ChatResponse> => {
   try {
-    const { category: categoryFilter, grade: gradeFilter, maxAge, minAge } = filters;
+    const {
+      category: categoryFilter,
+      grade: gradeFilter,
+      minExperienceYears,
+      maxExperienceYears,
+      maxAge,
+      minAge,
+    } = filters;
     const hasAgeFilter = maxAge !== null || minAge !== null;
-    const hasStructuredFilter = !!(gradeFilter || categoryFilter || hasAgeFilter);
+    const hasExperienceFilter = minExperienceYears !== null || maxExperienceYears !== null;
+    const hasStructuredFilter = !!(gradeFilter || categoryFilter || hasAgeFilter || hasExperienceFilter);
     console.log(
       "[검색] 3. 필터 - 등급:", gradeFilter ?? "없음",
       "/ 직무:", categoryFilter ?? "없음",
+      "/ 경력(년):", hasExperienceFilter ? `${minExperienceYears ?? ""}~${maxExperienceYears ?? ""}` : "없음",
       "/ 나이:", hasAgeFilter ? `${minAge ?? ""}~${maxAge ?? ""}` : "없음",
     );
 
@@ -266,10 +327,11 @@ const postChatWithSupabase = async (
       };
     }
 
-    // 등급(경력 개월수)·나이(생년)는 사실 기반이라 신뢰도가 높아 '제외(hard filter)'로 적용한다.
+    // 등급(경력 개월수)·경력 연차·나이(생년)는 사실 기반이라 신뢰도가 높아 '제외(hard filter)'로 적용한다.
     // 평문 컬럼(total_experience_months, birth_date)으로 먼저 걸러 카드 매핑 비용을 줄인다.
     const hardFiltered: ResumeRow[] = rawCandidates.filter((c: ResumeRow) =>
       (!gradeFilter || matchesGrade(c.total_experience_months ?? 0, gradeFilter)) &&
+      matchesExperience(c.total_experience_months ?? 0, minExperienceYears, maxExperienceYears) &&
       matchesAge(c.birth_date, maxAge, minAge),
     );
 
@@ -279,8 +341,8 @@ const postChatWithSupabase = async (
       work_experiences: c.work_experiences || [],
       projects: c.projects || [],
     }));
-    if (gradeFilter || hasAgeFilter)
-      console.log("[검색] 6. 등급/나이 하드필터 후:", hardFiltered.length, "건");
+    if (gradeFilter || hasExperienceFilter || hasAgeFilter)
+      console.log("[검색] 6. 등급/경력/나이 하드필터 후:", hardFiltered.length, "건");
 
     // 직무 카테고리는 이력서 텍스트 기반 추론이라 오분류 가능성이 있어 '제외' 가 아닌
     // '우선순위' 로 적용한다. 일치 후보를 앞세우되 4명에 못 미치면 벡터 유사도 순으로 보충해,
@@ -309,6 +371,8 @@ const postChatWithSupabase = async (
       const filterDesc = [
         categoryFilter && `직무: ${categoryFilter}`,
         gradeFilter && `등급: ${gradeFilter}`,
+        minExperienceYears !== null && `경력 ${minExperienceYears}년 이상`,
+        maxExperienceYears !== null && `경력 ${maxExperienceYears}년 이하`,
         maxAge !== null && `${maxAge}세 이하`,
         minAge !== null && `${minAge}세 이상`,
       ].filter(Boolean).join(", ");
