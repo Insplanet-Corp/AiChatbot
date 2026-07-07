@@ -72,7 +72,7 @@ const HomeMain = styled(Main)`
 
 const CenterContent = styled.div`
   width: 100%;
-  max-width: 1000px;
+  max-width: 720px;
   padding: 0 var(--space-24, 24px);
 
   @media (max-width: 640px) {

@@ -96,6 +96,34 @@ const loadPdfjs = async () => {
   pdfjsLoaded = true;
 };
 
+// 이미지형(스캔) / 아웃라인 폰트 PDF 폴백 OCR.
+// 텍스트 레이어가 없는 PDF(스캔본, 또는 글자가 벡터로 그려져 추출이 0자인 경우)는
+// 각 페이지를 @napi-rs/canvas 로 래스터화한 뒤 Tesseract.js(kor+eng)로 인식한다.
+// ⚠️ 캔버스는 반드시 @napi-rs/canvas 를 써야 한다 — pdfjs 가 Node 에서 내부 임시 캔버스를
+//    @napi-rs/canvas(pdfjs-dist optionalDependency)로 만들기 때문에, node-canvas(canvas) 와
+//    섞으면 "Image or Canvas expected" 로 렌더가 실패한다.
+//    (브라우저는 src/utils/fileParser.ts 가 DOM canvas + tesseract.js 로 동일 동작)
+// 언어데이터(kor/eng)는 첫 실행 시 jsDelivr CDN 에서 받는다(오프라인이면 실패).
+const extractPdfTextViaOcr = async (pdf) => {
+  const { createCanvas } = await import("@napi-rs/canvas");
+  const { createWorker } = await import("tesseract.js");
+  const worker = await createWorker("kor+eng");
+  try {
+    let ocrText = "";
+    for (let i = 1; i <= pdf.numPages; i++) {
+      const page = await pdf.getPage(i);
+      const viewport = page.getViewport({ scale: 2.5 }); // 해상도 ↑ → 한글 인식률 ↑
+      const canvas = createCanvas(viewport.width, viewport.height);
+      await page.render({ canvasContext: canvas.getContext("2d"), viewport }).promise;
+      const { data } = await worker.recognize(canvas.toBuffer("image/png"));
+      ocrText += data.text + "\n";
+    }
+    return ocrText.trim();
+  } finally {
+    await worker.terminate();
+  }
+};
+
 const extractPdfText = async (filePath) => {
   await loadPdfjs();
   const data = new Uint8Array(fs.readFileSync(filePath));
@@ -106,7 +134,13 @@ const extractPdfText = async (filePath) => {
     const textContent = await page.getTextContent();
     fullText += textContent.items.map((item) => item.str).join(" ") + "\n";
   }
-  return fullText.trim();
+  fullText = fullText.trim();
+  // 텍스트 레이어가 충분하면 그대로 사용(빠름). 너무 짧으면 이미지형/아웃라인 PDF 로 보고 OCR 폴백.
+  // (src/utils/fileParser.ts 와 동일한 100자 임계값 · "더 풍부한 쪽 채택" 로직)
+  if (fullText.length >= 100) return fullText;
+  process.stdout.write("이미지형 PDF 감지 → OCR 폴백... ");
+  const ocrText = await extractPdfTextViaOcr(pdf);
+  return ocrText.length > fullText.length ? ocrText : fullText;
 };
 
 const extractDocxText = async (filePath) => {
@@ -831,8 +865,9 @@ const parseResumeFile = async (filePath) => {
   console.log(`완료 (${extractedText.length.toLocaleString()}자)`);
 
   if (extractedText.length < 100) {
-    // 이미지형 PDF는 브라우저 업로드 시에만 Vision OCR이 동작한다(이 스크립트는 미지원).
-    throw new Error(`텍스트 추출 실패: ${extractedText.length}자 (이미지형 PDF 추정 — 브라우저에서 업로드 필요)`);
+    // 이미지형 PDF 는 extractPdfText 내부에서 이미 OCR 폴백을 시도한다.
+    // 그래도 100자 미만이면 빈 PDF 또는 OCR 불가한 저화질 스캔으로 판단.
+    throw new Error(`텍스트 추출 실패: ${extractedText.length}자 (빈 PDF 또는 OCR 불가한 저화질 스캔 추정)`);
   }
   if (verbose) {
     console.log("\n--- 추출 텍스트(앞 400자) ---\n" + extractedText.slice(0, 400) + "\n---");
