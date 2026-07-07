@@ -14,7 +14,14 @@ import "dotenv/config";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath, pathToFileURL } from "url";
-import { PROJECT_SECTION_PATTERN } from "./shared/patterns.mjs";
+import {
+  reconstructPdfPageText,
+  splitResumeIntoSections,
+  repairTruncatedJson as repairJson,
+  sanitizeUndefined,
+  deduplicateProjects,
+  stripExampleEntries,
+} from "../src/shared/resumeParsingCore.ts";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -54,87 +61,6 @@ const loadPdfjs = async () => {
   const workerPath = path.join(ROOT, "node_modules", "pdfjs-dist", "legacy", "build", "pdf.worker.mjs");
   GlobalWorkerOptions.workerSrc = pathToFileURL(workerPath).href;
   pdfjsLoaded = true;
-};
-
-// 좌표 기반 마크다운형 구조 재구성 (src/utils/fileParser.ts 의 reconstructPdfPageText 동기화)
-const reconstructPdfPageText = (textContent) => {
-  const items = textContent.items
-    .filter((it) => it.str && it.str.trim())
-    .map((it) => ({
-      str: it.str,
-      x: it.transform[4],
-      y: it.transform[5],
-      w: it.width,
-      h: it.height || Math.abs(it.transform[3]) || 10,
-    }));
-  if (items.length === 0) return "";
-
-  items.sort((a, b) => b.y - a.y || a.x - b.x);
-  const lines = [[items[0]]];
-  for (let i = 1; i < items.length; i++) {
-    const item = items[i];
-    const line = lines[lines.length - 1];
-    if (Math.abs(line[0].y - item.y) <= Math.max(item.h, line[0].h) * 0.5) line.push(item);
-    else lines.push([item]);
-  }
-
-  const avgH = items.reduce((sum, it) => sum + it.h, 0) / items.length;
-
-  // 각 줄을 셀 목록으로 변환 (수평 간격 1.5배 이상 = 열 경계)
-  const rows = lines.map((line) => {
-    line.sort((a, b) => a.x - b.x);
-    const cells = [];
-    let cur = null;
-    for (const it of line) {
-      if (cur && it.x - cur.end <= avgH * 1.5) {
-        const gap = it.x - cur.end;
-        const needSpace = gap > avgH * 0.15 && !cur.text.endsWith(" ") && !it.str.startsWith(" ");
-        cur.text += (needSpace ? " " : "") + it.str;
-        cur.end = it.x + it.w;
-      } else {
-        cur = { x: it.x, end: it.x + it.w, text: it.str };
-        cells.push(cur);
-      }
-    }
-    return { y: line[0].y, cells };
-  });
-
-  const joinWrapped = (a, b) =>
-    /[가-힣一-龥]$/.test(a) && /^[가-힣一-龥]/.test(b) ? a + b : `${a} ${b}`;
-
-  // 줄바꿈된 표 행 병합: (a) 세로 중앙정렬로 갈라진 줄(간격 < 0.8배) (b) 셀 텍스트 줄바꿈(정렬 + 간격 < 1.9배)
-  const merged = [];
-  for (const row of rows) {
-    const prev = merged[merged.length - 1];
-    const gap = prev !== undefined ? prev.y - row.y : Infinity;
-    const sameRow = prev !== undefined && prev.cells.length >= 2 && gap < avgH * 0.8;
-    const wrappedLine =
-      prev !== undefined &&
-      prev.cells.length >= 3 &&
-      row.cells.length >= 2 &&
-      row.cells.length <= prev.cells.length &&
-      gap < avgH * 1.9 &&
-      row.cells.every((c) => prev.cells.some((pc) => Math.abs(pc.x - c.x) < avgH));
-    if (sameRow || wrappedLine) {
-      for (const c of row.cells) {
-        const target = prev.cells.find((pc) => Math.abs(pc.x - c.x) < avgH);
-        if (target) target.text = joinWrapped(target.text, c.text);
-        else { prev.cells.push({ ...c }); prev.cells.sort((a, b) => a.x - b.x); }
-      }
-      prev.y = row.y;
-    } else {
-      merged.push(row);
-    }
-  }
-
-  let out = "";
-  let prevY = null;
-  for (const row of merged) {
-    if (prevY !== null && prevY - row.y > avgH * 2.2) out += "\n";
-    out += row.cells.map((c) => c.text.trim()).join(" | ") + "\n";
-    prevY = row.y;
-  }
-  return out.trim();
 };
 
 // 이미지형(스캔) PDF 폴백 OCR (scripts/seedResumesToDB.mjs 동일 로직)
@@ -304,41 +230,6 @@ Extract ALL projects above as a JSON array. Do not skip any entry. Empty fields 
   },
 ];
 
-// ── 섹션 분리 (resumePrompt.ts의 splitResumeIntoSections 동기화) ──────────────
-const splitResumeIntoSections = (text) => {
-  const matchIdx = text.search(PROJECT_SECTION_PATTERN);
-
-  if (matchIdx === -1) return { base: text, projectChunks: [] };
-
-  const baseText = text.substring(0, matchIdx).trim();
-  const projectText = text.substring(matchIdx).trim();
-
-  const lines = projectText.split("\n").filter((l) => l.trim());
-  const projectEntries = [];
-  let current = "";
-
-  for (const line of lines) {
-    // 날짜 "범위 시작"(~ 포함)만 새 항목으로 감지 — 줄바꿈된 표 셀의 종료일 줄 오인 방지
-    const isNew = /^\s*(\d{4}[.\-]\d{1,2}\s*[~∼]|\d{4}년)/.test(line) || /^\s*undefined/.test(line);
-    if (isNew && current.trim()) {
-      projectEntries.push(current.trim());
-      current = line;
-    } else {
-      current += (current ? "\n" : "") + line;
-    }
-  }
-  if (current.trim()) projectEntries.push(current.trim());
-
-  const chunkSize = Math.ceil(projectEntries.length / 3);
-  const projectChunks = [];
-  for (let i = 0; i < projectEntries.length; i += chunkSize) {
-    const chunk = projectEntries.slice(i, i + chunkSize).join("\n");
-    if (chunk.trim()) projectChunks.push(chunk);
-  }
-
-  return { base: baseText, projectChunks };
-};
-
 // ── Ollama 호출 ───────────────────────────────────────────────────────────────
 const LLM_OPTIONS = {
   temperature: 0.1,
@@ -374,80 +265,6 @@ const callOllama = async (messages, useJsonFormat = true) => {
   }
   if (buf.trim()) content += JSON.parse(buf).message?.content ?? "";
   return content;
-};
-
-// ── JSON 복구 ─────────────────────────────────────────────────────────────────
-const extractJsonText = (raw) => {
-  const objStart = raw.indexOf("{");
-  const arrStart = raw.indexOf("[");
-  const isArray = arrStart !== -1 && (objStart === -1 || arrStart < objStart);
-  if (isArray) {
-    const end = raw.lastIndexOf("]");
-    if (arrStart === -1 || end === -1) throw new Error("JSON 배열을 찾을 수 없습니다.");
-    return raw.substring(arrStart, end + 1);
-  }
-  const end = raw.lastIndexOf("}");
-  if (objStart === -1 || end === -1) throw new Error("JSON 객체를 찾을 수 없습니다.");
-  return raw.substring(objStart, end + 1);
-};
-
-const repairJson = (raw) => {
-  let text = extractJsonText(raw);
-  try { JSON.parse(text); return text; } catch {}
-
-  // LLM이 출력한 JSON 미허용 이스케이프(예: "\W", "\한")를 리터럴 백슬래시로 교정
-  text = text.replace(/\\(?!["\\/bfnrtu]|u[0-9a-fA-F]{4})/g, "\\\\");
-  try { JSON.parse(text); return text; } catch {}
-
-  const stack = [];
-  const pairs = { "{": "}", "[": "]" };
-  let inString = false;
-  for (let i = 0; i < text.length; i++) {
-    const ch = text[i];
-    if (inString) { if (ch === '"' && text[i - 1] !== "\\") inString = false; continue; }
-    if (ch === '"') { inString = true; continue; }
-    if (ch === "{" || ch === "[") stack.push(ch);
-    else if (ch === "}" || ch === "]") stack.pop();
-  }
-  const repaired = text.trimEnd().replace(/,\s*$/, "") + stack.reverse().map((c) => pairs[c]).join("");
-  JSON.parse(repaired); // 실패 시 예외 발생
-  return repaired;
-};
-
-const sanitizeUndefined = (obj) => {
-  if (Array.isArray(obj)) return obj.map(sanitizeUndefined);
-  if (obj !== null && typeof obj === "object")
-    return Object.fromEntries(Object.entries(obj).map(([k, v]) => [k, sanitizeUndefined(v)]));
-  if (typeof obj === "string" && obj.trim().toLowerCase() === "undefined") return "";
-  return obj;
-};
-
-// 프롬프트 few-shot 예시의 프로젝트/회사/학교 — LLM 이 베껴온 항목은 제거 (resumeService.ts 동기화)
-const EXAMPLE_PROJECT_NAMES = new Set([
-  "카카오페이 결제 모듈 고도화",
-  "사내 모니터링 대시보드 구축",
-  "삼성 브랜드 리뉴얼",
-]);
-const EXAMPLE_COMPANY_NAMES = new Set(["카카오(주)", "스타트업A", "디자인컴퍼니"]);
-const EXAMPLE_SCHOOL_NAMES = new Set(["한국대학교"]);
-
-const stripExampleEntries = (data) => {
-  if (Array.isArray(data.projects))
-    data.projects = data.projects.filter((p) => !EXAMPLE_PROJECT_NAMES.has((p.project_name || "").trim()));
-  if (Array.isArray(data.work_experiences))
-    data.work_experiences = data.work_experiences.filter((w) => !EXAMPLE_COMPANY_NAMES.has((w.company_name || "").trim()));
-  if (Array.isArray(data.educations))
-    data.educations = data.educations.filter((e) => !EXAMPLE_SCHOOL_NAMES.has((e.school_name || "").trim()));
-};
-
-const deduplicateProjects = (projects) => {
-  const seen = new Set();
-  return projects.filter((p) => {
-    const key = (p.project_name || "").trim();
-    if (!key || seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
 };
 
 // ── 품질 점수 계산 ────────────────────────────────────────────────────────────

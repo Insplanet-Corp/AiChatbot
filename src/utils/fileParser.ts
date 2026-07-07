@@ -2,6 +2,7 @@ import * as mammoth from "mammoth";
 import * as XLSX from "xlsx";
 import * as pdfjsLib from "pdfjs-dist";
 import pdfWorkerUrl from "pdfjs-dist/build/pdf.worker.mjs?url";
+import { reconstructPdfPageText } from "../shared/resumeParsingCore";
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
 
@@ -32,109 +33,6 @@ const extractPdfTextViaOcr = async (pdf: any): Promise<string> => {
   } finally {
     await worker.terminate();
   }
-};
-
-// PDF 텍스트 아이템을 좌표 기반으로 마크다운형 구조로 재구성.
-// (기존 join(" ") 방식은 페이지 전체를 한 줄로 뭉개 줄/표 구조가 사라졌고,
-//  프롬프트의 "라벨 다음 줄 값·헤더 다음 줄 행" 규칙이 동작할 수 없었다)
-// - 같은 Y 좌표(±글자높이 절반)의 아이템 → 한 줄로 묶음
-// - 줄 안에서 글자높이 1.5배 이상 수평 간격 → 표의 열 경계로 보고 " | " 삽입
-// - 셀 텍스트가 줄바꿈된 표 행(열 x좌표가 이전 행과 정렬 + 수직 간격 좁음) → 셀 단위 병합
-// - 줄 사이 수직 간격이 글자높이 2.2배 이상 → 문단/섹션 경계로 보고 빈 줄 삽입
-// (scripts/testParseLocal.mjs · seedResumesToDB.mjs 에 동일 로직 있음 — 수정 시 함께 변경)
-const reconstructPdfPageText = (textContent: { items: any[] }): string => {
-  type Positioned = { str: string; x: number; y: number; w: number; h: number };
-  type Cell = { x: number; end: number; text: string };
-  const items: Positioned[] = textContent.items
-    .filter((it: any) => it.str && it.str.trim())
-    .map((it: any) => ({
-      str: it.str,
-      x: it.transform[4],
-      y: it.transform[5],
-      w: it.width,
-      h: it.height || Math.abs(it.transform[3]) || 10,
-    }));
-  if (items.length === 0) return "";
-
-  // 위→아래(y 내림차순 — PDF 좌표는 아래가 원점), 왼→오 정렬 후 같은 높이끼리 줄로 묶음
-  items.sort((a, b) => b.y - a.y || a.x - b.x);
-  const lines: Positioned[][] = [[items[0]]];
-  for (let i = 1; i < items.length; i++) {
-    const item = items[i];
-    const line = lines[lines.length - 1];
-    if (Math.abs(line[0].y - item.y) <= Math.max(item.h, line[0].h) * 0.5) {
-      line.push(item);
-    } else {
-      lines.push([item]);
-    }
-  }
-
-  const avgH = items.reduce((sum, it) => sum + it.h, 0) / items.length;
-
-  // 각 줄을 셀 목록으로 변환 (수평 간격 1.5배 이상 = 열 경계)
-  const rows = lines.map((line) => {
-    line.sort((a, b) => a.x - b.x);
-    const cells: Cell[] = [];
-    let cur: Cell | null = null;
-    for (const it of line) {
-      if (cur && it.x - cur.end <= avgH * 1.5) {
-        const gap = it.x - cur.end;
-        const needSpace =
-          gap > avgH * 0.15 && !cur.text.endsWith(" ") && !it.str.startsWith(" ");
-        cur.text += (needSpace ? " " : "") + it.str;
-        cur.end = it.x + it.w;
-      } else {
-        cur = { x: it.x, end: it.x + it.w, text: it.str };
-        cells.push(cur);
-      }
-    }
-    return { y: line[0].y, cells };
-  });
-
-  // 한글/한자 경계에서 줄바꿈된 단어는 공백 없이 이어붙임 ("포인트 적립 시"+"스템 개편")
-  const joinWrapped = (a: string, b: string): string =>
-    /[가-힣一-龥]$/.test(a) && /^[가-힣一-龥]/.test(b) ? a + b : `${a} ${b}`;
-
-  // 줄바꿈된 표 행 병합. 두 가지 신호를 본다:
-  // (a) 같은 행 안에서 세로 중앙정렬로 갈라진 줄 — 간격이 글자높이보다 훨씬 좁다(0.8배 미만).
-  //     일반 본문 줄 간격은 최소 1em 이상이므로 이 간격은 같은 표 행에서만 나온다.
-  // (b) 셀 텍스트 줄바꿈 — 줄 간격 수준(1.9배 미만)이고 모든 셀 x가 이전 행 셀과 정렬.
-  const merged: typeof rows = [];
-  for (const row of rows) {
-    const prev = merged[merged.length - 1];
-    const gap = prev !== undefined ? prev.y - row.y : Infinity;
-    const sameRow = prev !== undefined && prev.cells.length >= 2 && gap < avgH * 0.8;
-    const wrappedLine =
-      prev !== undefined &&
-      prev.cells.length >= 3 &&
-      row.cells.length >= 2 &&
-      row.cells.length <= prev.cells.length &&
-      gap < avgH * 1.9 &&
-      row.cells.every((c) => prev.cells.some((pc) => Math.abs(pc.x - c.x) < avgH));
-    if (sameRow || wrappedLine) {
-      for (const c of row.cells) {
-        const target = prev!.cells.find((pc) => Math.abs(pc.x - c.x) < avgH);
-        if (target) {
-          target.text = joinWrapped(target.text, c.text);
-        } else {
-          prev!.cells.push({ ...c }); // 새 열 위치면 x 순서에 맞게 셀로 삽입
-          prev!.cells.sort((a, b) => a.x - b.x);
-        }
-      }
-      prev!.y = row.y; // 3줄 이상 이어지는 행도 연속 병합되도록 기준 y 갱신
-    } else {
-      merged.push(row);
-    }
-  }
-
-  let out = "";
-  let prevY: number | null = null;
-  for (const row of merged) {
-    if (prevY !== null && prevY - row.y > avgH * 2.2) out += "\n";
-    out += row.cells.map((c) => c.text.trim()).join(" | ") + "\n";
-    prevY = row.y;
-  }
-  return out.trim();
 };
 
 const extractTextFromFile = async (file: File): Promise<string> => {

@@ -29,7 +29,22 @@ import fs from "fs";
 import path from "path";
 import { fileURLToPath, pathToFileURL } from "url";
 import { createClient } from "@supabase/supabase-js";
-import { PROJECT_SECTION_PATTERN } from "./shared/patterns.mjs";
+import {
+  reconstructPdfPageText,
+  splitResumeIntoSections,
+  repairTruncatedJson,
+  sanitizeUndefined,
+  deduplicateProjects,
+  buildEmbeddingText,
+  extractGradeFromFilename,
+  extractCategoryFromFilename,
+  extractNameFromFilename,
+  extractEmailFromText,
+  extractPhoneFromText,
+  EXAMPLE_NAMES,
+  stripExampleEntries,
+  isInterviewDocument,
+} from "../src/shared/resumeParsingCore.ts";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -123,87 +138,6 @@ const extractPdfTextViaOcr = async (pdf) => {
   } finally {
     await worker.terminate();
   }
-};
-
-// 좌표 기반 마크다운형 구조 재구성 (src/utils/fileParser.ts 의 reconstructPdfPageText 동기화)
-const reconstructPdfPageText = (textContent) => {
-  const items = textContent.items
-    .filter((it) => it.str && it.str.trim())
-    .map((it) => ({
-      str: it.str,
-      x: it.transform[4],
-      y: it.transform[5],
-      w: it.width,
-      h: it.height || Math.abs(it.transform[3]) || 10,
-    }));
-  if (items.length === 0) return "";
-
-  items.sort((a, b) => b.y - a.y || a.x - b.x);
-  const lines = [[items[0]]];
-  for (let i = 1; i < items.length; i++) {
-    const item = items[i];
-    const line = lines[lines.length - 1];
-    if (Math.abs(line[0].y - item.y) <= Math.max(item.h, line[0].h) * 0.5) line.push(item);
-    else lines.push([item]);
-  }
-
-  const avgH = items.reduce((sum, it) => sum + it.h, 0) / items.length;
-
-  // 각 줄을 셀 목록으로 변환 (수평 간격 1.5배 이상 = 열 경계)
-  const rows = lines.map((line) => {
-    line.sort((a, b) => a.x - b.x);
-    const cells = [];
-    let cur = null;
-    for (const it of line) {
-      if (cur && it.x - cur.end <= avgH * 1.5) {
-        const gap = it.x - cur.end;
-        const needSpace = gap > avgH * 0.15 && !cur.text.endsWith(" ") && !it.str.startsWith(" ");
-        cur.text += (needSpace ? " " : "") + it.str;
-        cur.end = it.x + it.w;
-      } else {
-        cur = { x: it.x, end: it.x + it.w, text: it.str };
-        cells.push(cur);
-      }
-    }
-    return { y: line[0].y, cells };
-  });
-
-  const joinWrapped = (a, b) =>
-    /[가-힣一-龥]$/.test(a) && /^[가-힣一-龥]/.test(b) ? a + b : `${a} ${b}`;
-
-  // 줄바꿈된 표 행 병합: (a) 세로 중앙정렬로 갈라진 줄(간격 < 0.8배) (b) 셀 텍스트 줄바꿈(정렬 + 간격 < 1.9배)
-  const merged = [];
-  for (const row of rows) {
-    const prev = merged[merged.length - 1];
-    const gap = prev !== undefined ? prev.y - row.y : Infinity;
-    const sameRow = prev !== undefined && prev.cells.length >= 2 && gap < avgH * 0.8;
-    const wrappedLine =
-      prev !== undefined &&
-      prev.cells.length >= 3 &&
-      row.cells.length >= 2 &&
-      row.cells.length <= prev.cells.length &&
-      gap < avgH * 1.9 &&
-      row.cells.every((c) => prev.cells.some((pc) => Math.abs(pc.x - c.x) < avgH));
-    if (sameRow || wrappedLine) {
-      for (const c of row.cells) {
-        const target = prev.cells.find((pc) => Math.abs(pc.x - c.x) < avgH);
-        if (target) target.text = joinWrapped(target.text, c.text);
-        else { prev.cells.push({ ...c }); prev.cells.sort((a, b) => a.x - b.x); }
-      }
-      prev.y = row.y;
-    } else {
-      merged.push(row);
-    }
-  }
-
-  let out = "";
-  let prevY = null;
-  for (const row of merged) {
-    if (prevY !== null && prevY - row.y > avgH * 2.2) out += "\n";
-    out += row.cells.map((c) => c.text.trim()).join(" | ") + "\n";
-    prevY = row.y;
-  }
-  return out.trim();
 };
 
 const extractPdfText = async (filePath) => {
@@ -434,41 +368,6 @@ Extract ALL projects above as a JSON array. Do not skip any entry. Empty fields 
   },
 ];
 
-// 알려진 섹션 헤더로 텍스트를 base / 프로젝트 청크로 분리
-const splitResumeIntoSections = (text) => {
-  const matchIdx = text.search(PROJECT_SECTION_PATTERN);
-
-  if (matchIdx === -1) return { base: text, projectChunks: [] };
-
-  const baseText = text.substring(0, matchIdx).trim();
-  const projectText = text.substring(matchIdx).trim();
-
-  const lines = projectText.split("\n").filter((l) => l.trim());
-  const projectEntries = [];
-  let current = "";
-
-  for (const line of lines) {
-    // 날짜 "범위 시작"(~ 포함)만 새 항목으로 감지 — 줄바꿈된 표 셀의 종료일 줄 오인 방지
-    const isNew = /^\s*(\d{4}[.\-]\d{1,2}\s*[~∼]|\d{4}년)/.test(line) || /^\s*undefined/.test(line);
-    if (isNew && current.trim()) {
-      projectEntries.push(current.trim());
-      current = line;
-    } else {
-      current += (current ? "\n" : "") + line;
-    }
-  }
-  if (current.trim()) projectEntries.push(current.trim());
-
-  const chunkSize = Math.ceil(projectEntries.length / 3);
-  const projectChunks = [];
-  for (let i = 0; i < projectEntries.length; i += chunkSize) {
-    const chunk = projectEntries.slice(i, i + chunkSize).join("\n");
-    if (chunk.trim()) projectChunks.push(chunk);
-  }
-
-  return { base: baseText, projectChunks };
-};
-
 // ════════════════════════════════════════════════════════════════════════════
 //  Ollama 호출 (src/apis/ollama.ts 와 동일 동작 — keep_alive:-1 로 모델 상주)
 // ════════════════════════════════════════════════════════════════════════════
@@ -542,203 +441,6 @@ const getEmbedding = async (text) => {
   if (!res.ok) throw new Error(`Ollama Embedding ${res.status}: ${await res.text()}`);
   const result = await res.json();
   return result.embedding;
-};
-
-// ════════════════════════════════════════════════════════════════════════════
-//  JSON 복구 / 정리 (src/services/resumeService.ts 와 동일 로직)
-// ════════════════════════════════════════════════════════════════════════════
-const extractJsonText = (raw) => {
-  const objStart = raw.indexOf("{");
-  const arrStart = raw.indexOf("[");
-  const isArray = arrStart !== -1 && (objStart === -1 || arrStart < objStart);
-  if (isArray) {
-    const end = raw.lastIndexOf("]");
-    if (arrStart === -1 || end === -1) throw new Error("JSON 배열을 찾을 수 없습니다.");
-    return raw.substring(arrStart, end + 1);
-  }
-  const end = raw.lastIndexOf("}");
-  if (objStart === -1 || end === -1) throw new Error("JSON 객체를 찾을 수 없습니다.");
-  return raw.substring(objStart, end + 1);
-};
-
-const repairTruncatedJson = (raw) => {
-  let text = extractJsonText(raw);
-  try { JSON.parse(text); return text; } catch {}
-
-  // LLM이 출력한 JSON 미허용 이스케이프(예: "\W", "\한")를 리터럴 백슬래시로 교정
-  text = text.replace(/\\(?!["\\/bfnrtu]|u[0-9a-fA-F]{4})/g, "\\\\");
-  try { JSON.parse(text); return text; } catch {}
-
-  const stack = [];
-  const pairs = { "{": "}", "[": "]" };
-  let inString = false;
-  for (let i = 0; i < text.length; i++) {
-    const ch = text[i];
-    if (inString) { if (ch === '"' && text[i - 1] !== "\\") inString = false; continue; }
-    if (ch === '"') { inString = true; continue; }
-    if (ch === "{" || ch === "[") stack.push(ch);
-    else if (ch === "}" || ch === "]") stack.pop();
-  }
-  const repaired = text.trimEnd().replace(/,\s*$/, "") + stack.reverse().map((c) => pairs[c]).join("");
-  JSON.parse(repaired); // 실패 시 예외 발생
-  return repaired;
-};
-
-const sanitizeUndefined = (obj) => {
-  if (Array.isArray(obj)) return obj.map(sanitizeUndefined);
-  if (obj !== null && typeof obj === "object")
-    return Object.fromEntries(Object.entries(obj).map(([k, v]) => [k, sanitizeUndefined(v)]));
-  if (typeof obj === "string" && obj.trim().toLowerCase() === "undefined") return "";
-  return obj;
-};
-
-const deduplicateProjects = (projects) => {
-  const seen = new Set();
-  return projects.filter((p) => {
-    const key = (p.project_name || "").trim();
-    if (!key || seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
-};
-
-// ── 임베딩 텍스트 조립 (src/services/resumeService.ts buildEmbeddingText 동기화) ──
-const mapJoin = (arr, fn, sep) => (Array.isArray(arr) ? arr.map(fn).join(sep) : "");
-
-const buildEmbeddingText = (parsedData) => {
-  const jobCategory = parsedData.professional_summary?.job_category || "직무미상";
-  const currentRole = parsedData.professional_summary?.current_role || "";
-
-  const skillString = mapJoin(parsedData.skills, (s) => (typeof s === "string" ? s : s.skill_name || ""), ", ");
-  const competencyString = mapJoin(parsedData.professional_summary?.core_competencies, (c) => c, " ");
-
-  const projectString = mapJoin(parsedData.projects, (p) => {
-    const techStr = Array.isArray(p.tech_stack) ? p.tech_stack.join(", ") : "";
-    const outcomeStr = p.outcomes || "";
-    return [p.project_name, techStr, outcomeStr].filter(Boolean).join(" | ");
-  }, "\n");
-
-  const workTechString = mapJoin(parsedData.work_experiences, (w) => {
-    const techStr = Array.isArray(w.tech_stack) ? w.tech_stack.join(", ") : "";
-    const achieveStr = Array.isArray(w.key_achievements) ? w.key_achievements.join(". ") : "";
-    return [w.company_name, w.job_title, techStr, achieveStr].filter(Boolean).join(" | ");
-  }, "\n");
-
-  return `직군: ${jobCategory}\n직무: ${currentRole}\n기술스택: ${skillString}\n핵심역량: ${competencyString}\n주요프로젝트:\n${projectString}\n경력상세:\n${workTechString}`.trim();
-};
-
-// ── 파일명에서 이름/등급 추출 (src/services/resumeService.ts 동기화) ──────────
-const CANDIDATE_GRADES = ["초급", "중급", "고급", "특급"];
-
-const FILENAME_STOPWORDS = [
-  "경력기술서", "자기소개서", "재직증명서", "경력증명서",
-  "포트폴리오", "지원서", "이력서", "자소서", "경력", "이력",
-  "국문", "영문", "최종", "수정", "사본", "제출", "양식",
-  // 직군/문서 태그 (예: "프로필_웹기획_강재희.pdf" 에서 "웹기획"이 이름으로 오인되는 것 방지)
-  "프로필", "웹기획", "웹디자인", "웹퍼블리싱", "퍼블리셔",
-  "디자이너", "개발자", "기획자",
-  "resume", "portfolio", "profile", "cv",
-];
-
-const extractGradeFromFilename = (filename) => {
-  const base = filename.replace(/\.[^.]+$/, "");
-  return CANDIDATE_GRADES.find((g) => base.includes(g)) ?? null;
-};
-
-// 파일명 직군 태그 → 4개 표준 카테고리 (src/services/resumeService.ts extractCategoryFromFilename 동기화)
-const CATEGORY_FILENAME_PATTERNS = [
-  ["퍼블리싱", /퍼블|publish|마크업|markup/i],
-  ["개발", /개발|프론트\s*엔드|백\s*엔드|풀스택|frontend|backend|develop|engineer|프로그래/i],
-  ["디자인", /디자인|UI\/?UX|UX|그래픽|design/i],
-  ["기획", /기획|제안|PM|PO/i],
-];
-const extractCategoryFromFilename = (filename) => {
-  const base = filename.replace(/\.[^.]+$/, "");
-  const paren = base.match(/^\s*\(([^)]+)\)/);
-  // 내부 괄호 주석(출처/메모)은 제거해 회사명 오인 방지. 여러 태그면 가장 앞 직군 우선.
-  const head = (paren ? paren[1] : base.split("__")[0]).replace(/\([^)]*\)/g, " ");
-  let best = null, bestIdx = Infinity;
-  for (const [canon, re] of CATEGORY_FILENAME_PATTERNS) {
-    const m = head.match(re);
-    if (m && m.index !== undefined && m.index < bestIdx) { bestIdx = m.index; best = canon; }
-  }
-  return best;
-};
-
-const extractNameFromFilename = (filename) => {
-  let base = filename.replace(/\.[^.]+$/, "");
-  for (const word of FILENAME_STOPWORDS) base = base.replace(new RegExp(word, "gi"), " ");
-  const token = base
-    .replace(/[^가-힣]+/g, " ")
-    .trim()
-    .split(/\s+/)
-    .find((t) => t.length >= 2 && t.length <= 5);
-  return token || null;
-};
-
-// 이메일 추출 (src/services/resumeService.ts extractEmailFromText 와 동기화)
-// 로컬파트@도메인.TLD(2자 이상). .com / .co.kr 등 매칭. LLM 누락 시 원문에서 보강.
-const EMAIL_REGEX = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/;
-
-const extractEmailFromText = (text) => {
-  if (!text) return null;
-  const direct = text.match(EMAIL_REGEX);
-  if (direct) return direct[0];
-  // PDF 추출 시 "hong @ example. com" 처럼 @·. 주변 공백이 끼는 경우 보정 후 재시도
-  const despaced = text.replace(/\s*([@.])\s*/g, "$1");
-  return despaced.match(EMAIL_REGEX)?.[0] ?? null;
-};
-
-// 휴대폰 추출 (src/services/resumeService.ts extractPhoneFromText 와 동기화)
-// 01X-XXXX-XXXX(구분자 유연, +82 선택). LLM 누락 시 원문에서 보강(이메일과 대칭).
-const PHONE_REGEX = /(?:\+?82[-.\s]?)?0?1[016789][-.\s]?\d{3,4}[-.\s]?\d{4}/;
-
-const extractPhoneFromText = (text) => {
-  if (!text) return null;
-  const direct = text.match(PHONE_REGEX)?.[0];
-  if (direct) return direct;
-  const labeled = text.match(
-    /(?:연락처|휴대폰|핸드폰|전화|mobile|tel|h\.?p)[^\d]{0,6}((?:\d[\s.\-]?){9,13})/i,
-  );
-  return labeled?.[1] ?? null;
-};
-
-// 프롬프트 few-shot 예시에 등장하는 더미 이름 — LLM 이 그대로 베껴오면 무효로 본다.
-// (src/services/resumeService.ts EXAMPLE_NAMES 와 동기화)
-const EXAMPLE_NAMES = new Set(["홍길동", "김도현", "박지은"]);
-
-// 프롬프트 few-shot 예시의 프로젝트/회사/학교 — LLM 이 베껴온 항목은 제거 (resumeService.ts 동기화)
-const EXAMPLE_PROJECT_NAMES = new Set([
-  "카카오페이 결제 모듈 고도화",
-  "사내 모니터링 대시보드 구축",
-  "삼성 브랜드 리뉴얼",
-]);
-const EXAMPLE_COMPANY_NAMES = new Set(["카카오(주)", "스타트업A", "디자인컴퍼니"]);
-const EXAMPLE_SCHOOL_NAMES = new Set(["한국대학교"]);
-
-const stripExampleEntries = (data) => {
-  if (Array.isArray(data.projects))
-    data.projects = data.projects.filter((p) => !EXAMPLE_PROJECT_NAMES.has((p.project_name || "").trim()));
-  if (Array.isArray(data.work_experiences))
-    data.work_experiences = data.work_experiences.filter((w) => !EXAMPLE_COMPANY_NAMES.has((w.company_name || "").trim()));
-  if (Array.isArray(data.educations))
-    data.educations = data.educations.filter((e) => !EXAMPLE_SCHOOL_NAMES.has((e.school_name || "").trim()));
-};
-
-// 인터뷰 문서(이력서 아님) 판별 (src/services/resumeService.ts isInterviewDocument 와 동기화)
-// 파일명 전체 + 본문 상단(제목 영역)을 공백 무시하고 키워드와 대조. 본문 상단만 보아 오제외 방지.
-const INTERVIEW_DOC_KEYWORDS = [
-  "인터뷰질의서", "인터뷰질문지", "인터뷰질문서", "인터뷰시트",
-  "전화인터뷰", "전화면접",
-  "면접질의서", "면접질문지",
-];
-
-const stripSpaces = (s) => s.replace(/\s+/g, "");
-
-const isInterviewDocument = (filename, text) => {
-  const nameKey = stripSpaces(filename);
-  const titleKey = stripSpaces(text.slice(0, 250)); // 본문 상단(제목) 영역만 검사
-  return INTERVIEW_DOC_KEYWORDS.some((k) => nameKey.includes(k) || titleKey.includes(k));
 };
 
 // ── ResumeData 정규화 (src/utils/resumeNormalize.ts normalizeResumeData 와 동기화) ──

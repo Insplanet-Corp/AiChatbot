@@ -8,7 +8,7 @@
 import fs from "fs";
 import path from "path";
 import { pathToFileURL } from "url";
-import { PROJECT_SECTION_PATTERN } from "./shared/patterns.mjs";
+import { PROJECT_SECTION_PATTERN } from "../src/shared/resumeParsingCore.ts";
 
 const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname).replace(/^\/([A-Za-z]:)/, "$1"), "..");
 const getArg = (n) => { const a = process.argv.slice(2); const i = a.indexOf(n); return i !== -1 ? a[i + 1] : undefined; };

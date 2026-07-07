@@ -326,54 +326,8 @@ Extract ALL projects above as a JSON array. Do not skip any entry. Empty fields 
   },
 ];
 
-// 프로젝트/수상경력 섹션이 시작되는 지점을 찾는 패턴.
-// scripts/shared/patterns.mjs 의 PROJECT_SECTION_PATTERN 과 동기화 유지.
-export const PROJECT_SECTION_PATTERN =
-  /(?:수상경력|프로젝트\s*수행\s*경력|프로젝트\s*이력|수행\s*경력|PROJECT)/i;
+// 프로젝트/수상경력 섹션 분리 패턴·함수는 src/shared/resumeParsingCore.ts 로 이동
+// (브라우저·Node 스크립트 공용 순수 로직이라 파싱 관련 상수/유틸을 한 곳에 모음).
+export { PROJECT_SECTION_PATTERN, splitResumeIntoSections } from "../shared/resumeParsingCore";
 
-// 알려진 섹션 헤더로 텍스트를 섹션 맵으로 분리
-const splitResumeIntoSections = (
-  text: string,
-): { base: string; projectChunks: string[] } => {
-  const projectSectionMatch = text.search(PROJECT_SECTION_PATTERN);
-
-  if (projectSectionMatch === -1) {
-    return { base: text, projectChunks: [] };
-  }
-
-  const baseText = text.substring(0, projectSectionMatch).trim();
-  const projectText = text.substring(projectSectionMatch).trim();
-
-  // 프로젝트 섹션을 줄 단위로 나눠서 날짜 패턴 기준으로 각 항목 분리
-  const lines = projectText.split("\n").filter((l) => l.trim());
-  const projectEntries: string[] = [];
-  let currentEntry = "";
-
-  for (const line of lines) {
-    // 날짜 "범위 시작"(~ 포함)으로만 새 항목을 감지 (예: "2024.01 ~").
-    // 좌표 재구성된 표에서 셀이 줄바꿈되면 "2024.09 | 스템 개편"처럼 종료일만 있는
-    // 이어짐 줄이 생기는데, 단순 날짜 패턴이면 이를 새 항목으로 오인해 프로젝트가 쪼개진다.
-    const isNewEntry =
-      /^\s*(\d{4}[.\-]\d{1,2}\s*[~∼]|\d{4}년)/.test(line) ||
-      /^\s*undefined/.test(line);
-    if (isNewEntry && currentEntry.trim()) {
-      projectEntries.push(currentEntry.trim());
-      currentEntry = line;
-    } else {
-      currentEntry += (currentEntry ? "\n" : "") + line;
-    }
-  }
-  if (currentEntry.trim()) projectEntries.push(currentEntry.trim());
-
-  // 프로젝트 항목들을 3개 청크로 균등 분할
-  const chunkSize = Math.ceil(projectEntries.length / 3);
-  const projectChunks: string[] = [];
-  for (let i = 0; i < projectEntries.length; i += chunkSize) {
-    const chunk = projectEntries.slice(i, i + chunkSize).join("\n");
-    if (chunk.trim()) projectChunks.push(chunk);
-  }
-
-  return { base: baseText, projectChunks };
-};
-
-export { DEFAULT_EDUCATION_LEVEL, RESUME_PARSER_MESSAGES, RESUME_PROJECTS_ONLY_MESSAGES, splitResumeIntoSections };
+export { DEFAULT_EDUCATION_LEVEL, RESUME_PARSER_MESSAGES, RESUME_PROJECTS_ONLY_MESSAGES };
