@@ -2,7 +2,9 @@ import { supabase } from "../utils/supabase";
 import { askOllama, getEmbedding, LLM_JSON_OPTIONS } from "../apis/ollama";
 import {
   SEARCH_FILTER_MESSAGES,
+  SEARCH_FILTER_SCHEMA,
   CHAT_WITH_SUPABASE_MESSAGES,
+  CANDIDATE_EVAL_SCHEMA,
 } from "../constants/chatPrompt";
 import { mapRowToCardData, CandidateCardData } from "./candidateService";
 import { JOB_CATEGORIES, type JobCategory } from "../constants/service";
@@ -82,10 +84,11 @@ const coerceExperienceYears = (v: unknown): number | null => {
   return Number.isFinite(n) && n >= 0 && n <= 60 ? Math.trunc(n) : null;
 };
 
-// ── 정규식 폴백: 라우터 LLM 호출/파싱이 실패해도 결정적 키워드 필터는 유지 ──
-// (텍스트 모델이 VRAM 부족 등으로 불안정할 때 검색이 '무필터'로 떨어지는 것을 막는 안전망.
-//  임베딩 모델만 살아 있어도 키워드 기반 검색이 동작하도록 한다.)
-const fallbackCategory = (message: string): JobCategory | null => {
+// ── 정규식 1차 추출: 결정적 키워드는 정규식이 먼저 뽑는다 ──
+// 정규식이 잡은 값은 LLM 결과보다 우선한다(환각 없음·결정적). LLM 은 정규식이 못 잡은
+// 애매한 표현("웹퍼블 마크업 전문가", 영문 등)만 보완하고, LLM 호출/파싱이 실패해도
+// 정규식 결과만으로 검색이 동작한다(임베딩 모델만 살아 있어도 키워드 검색 유지).
+const regexCategory = (message: string): JobCategory | null => {
   const m = message.toLowerCase();
   if (/디자이너|디자인|designer/.test(m)) return "디자인";
   if (/퍼블리|publish/.test(m)) return "퍼블리싱";
@@ -94,7 +97,7 @@ const fallbackCategory = (message: string): JobCategory | null => {
   return null;
 };
 
-const fallbackGrade = (message: string): GradeLabel | null => {
+const regexGrade = (message: string): GradeLabel | null => {
   const m = message.toLowerCase();
   if (/초급|주니어|junior/.test(m)) return "초급";
   if (/중급|intermediate/.test(m)) return "중급";
@@ -102,7 +105,7 @@ const fallbackGrade = (message: string): GradeLabel | null => {
   return null;
 };
 
-const fallbackAge = (message: string): { maxAge: number | null; minAge: number | null } => {
+const regexAge = (message: string): { maxAge: number | null; minAge: number | null } => {
   const max = message.match(/(\d{1,2})\s*(?:세|살)\s*(?:이하|미만|까지)/);
   const min = message.match(/(\d{1,2})\s*(?:세|살)\s*(?:이상|초과|넘)/);
   return {
@@ -112,7 +115,7 @@ const fallbackAge = (message: string): { maxAge: number | null; minAge: number |
 };
 
 // "N년 이상/이하" 형태의 경력 연차 조건. ('년차'만 있는 단순 연차는 범위가 아니므로 무시)
-const fallbackExperience = (
+const regexExperience = (
   message: string,
 ): { minExperienceYears: number | null; maxExperienceYears: number | null } => {
   const min = message.match(/(\d{1,2})\s*년\s*(?:차)?\s*(?:이상|초과|넘)/);
@@ -123,13 +126,13 @@ const fallbackExperience = (
   };
 };
 
-const fallbackFilters = (message: string): SearchFilters => {
-  const grade = fallbackGrade(message);
-  const category = fallbackCategory(message);
-  const { maxAge, minAge } = fallbackAge(message);
-  const { minExperienceYears, maxExperienceYears } = fallbackExperience(message);
-  // 키워드 신호가 하나라도 잡히면 검색 의도로 본다. 아무 신호도 없으면 기존 동작(실패 시
-  // 'chat')을 유지해, LLM 다운 중 들어온 잡담을 검색으로 오인하지 않는다.
+const extractFiltersByRegex = (message: string): SearchFilters => {
+  const grade = regexGrade(message);
+  const category = regexCategory(message);
+  const { maxAge, minAge } = regexAge(message);
+  const { minExperienceYears, maxExperienceYears } = regexExperience(message);
+  // 키워드 신호가 하나라도 잡히면 검색 의도로 확정. 신호가 없으면 'chat' 으로 두되,
+  // LLM 이 살아 있으면 LLM 의 intent 판단("사람 구해요" 같은 무키워드 검색)으로 덮인다.
   const hasSignal = !!(
     grade ||
     category ||
@@ -149,28 +152,33 @@ const fallbackFilters = (message: string): SearchFilters => {
   };
 };
 
+// 정규식 1차 추출 → LLM 이 빈 필드만 보완하는 2단 구조.
+// 정규식이 잡은 값은 결정적이므로 LLM 값으로 절대 덮어쓰지 않는다(환각 방지).
+// LLM 호출/파싱이 실패하면 정규식 결과를 그대로 사용한다(기존 폴백 동작과 동일).
 const extractSearchFilters = async (message: string): Promise<SearchFilters> => {
+  const regex = extractFiltersByRegex(message);
   try {
     const content = await askOllama(
       import.meta.env.VITE_LLAMA_TEXT_MODEL,
       SEARCH_FILTER_MESSAGES(message),
       false,
-      LLM_JSON_OPTIONS,
+      { ...LLM_JSON_OPTIONS, format: SEARCH_FILTER_SCHEMA }, // 스키마로 키/타입까지 강제
     );
     console.log("[검색] 1-1. 라우터 LLM 원본 응답:", content);
     const parsed = JSON.parse(content);
     return {
-      intent: parsed.intent === "search" ? "search" : "chat",
-      category: coerceCategory(parsed.category),
-      grade: coerceGrade(parsed.grade),
-      minExperienceYears: coerceExperienceYears(parsed.minExperienceYears),
-      maxExperienceYears: coerceExperienceYears(parsed.maxExperienceYears),
-      maxAge: coerceAge(parsed.maxAge),
-      minAge: coerceAge(parsed.minAge),
+      // 정규식 신호가 있으면 이미 search. 없을 때만 LLM 의 의도 판단을 따른다.
+      intent: regex.intent === "search" || parsed.intent === "search" ? "search" : "chat",
+      category: regex.category ?? coerceCategory(parsed.category),
+      grade: regex.grade ?? coerceGrade(parsed.grade),
+      minExperienceYears: regex.minExperienceYears ?? coerceExperienceYears(parsed.minExperienceYears),
+      maxExperienceYears: regex.maxExperienceYears ?? coerceExperienceYears(parsed.maxExperienceYears),
+      maxAge: regex.maxAge ?? coerceAge(parsed.maxAge),
+      minAge: regex.minAge ?? coerceAge(parsed.minAge),
     };
   } catch (error) {
-    console.warn("[검색] 1-2. 라우터/필터 추출 실패 → 정규식 폴백 사용:", error);
-    return fallbackFilters(message);
+    console.warn("[검색] 1-2. 라우터 LLM 실패 → 정규식 추출 결과만 사용:", error);
+    return regex;
   }
 };
 
@@ -204,7 +212,7 @@ const evaluateCandidates = async (candidates: MinimalCandidate[], message: strin
       import.meta.env.VITE_LLAMA_TEXT_MODEL,
       CHAT_WITH_SUPABASE_MESSAGES(message, JSON.stringify(candidatesForLLM)),
       true,
-      { num_ctx: 16384, ...LLM_JSON_OPTIONS },
+      { num_ctx: 16384, ...LLM_JSON_OPTIONS, format: CANDIDATE_EVAL_SCHEMA }, // 스키마로 배열 형태 강제
     );
 
     const cleanedText = resultText.replace(/^```(?:json)?\s*/i, "").replace(/\s*```\s*$/, "").trim();

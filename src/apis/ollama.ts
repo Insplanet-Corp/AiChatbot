@@ -25,11 +25,13 @@ const fetchWithTimeout = async (
 
 // JSON 응답을 강제하는 LLM 호출의 공통 옵션.
 // (낮은 temperature + 모델 종료 토큰 + JSON 포맷). 호출부에서 num_ctx 등을 덧붙여 사용한다.
+// format 은 Ollama API 의 최상위 파라미터라 askOllama 가 options 에서 분리해 최상위로 보낸다.
+// ("json" 문자열 또는 JSON 스키마 객체 — 스키마를 주면 structured output 으로 형태까지 강제)
 export const LLM_JSON_OPTIONS = {
   temperature: 0.1,
   stop: ["<|endoftext|>", "<|im_start|>", "<|im_end|>", "Question:"],
-  format: "json",
-} as const;
+  format: "json" as string | object,
+};
 
 const getEmbedding = async (text: string): Promise<number[]> => {
   const response = await fetchWithTimeout(
@@ -59,12 +61,15 @@ const askOllama = async (
   stream = true,
   options?: any,
 ): Promise<string> => {
+  // format 은 options(모델 파라미터)가 아닌 요청 최상위 파라미터 — options 안에 있으면
+  // Ollama 가 무시해 JSON 강제가 걸리지 않으므로 여기서 분리해 최상위로 보낸다.
+  const { format, ...modelOptions } = options ?? {};
   const response = await fetchWithTimeout(
     `${OLLAMA_URL}/api/chat`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ model, messages, stream, options, keep_alive: -1 }),
+      body: JSON.stringify({ model, messages, stream, format, options: modelOptions, keep_alive: -1 }),
     },
     CHAT_TIMEOUT_MS,
     `Ollama 채팅(${model})`,

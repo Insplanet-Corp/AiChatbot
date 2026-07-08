@@ -35,6 +35,23 @@ const SEARCH_FILTER_SYSTEM_PROMPT = `당신은 인재 검색 쿼리에서 "의�
    - 나이 언급이 없으면 둘 다 null. "40대"처럼 범위가 모호하면 추측하지 말고 null.
 6. 확실하지 않은 값은 절대 추측하지 말고 null 을 사용한다.`;
 
+// Ollama structured output 스키마 — 라우터 응답의 "형태"를 모델 레벨에서 강제한다.
+// (format:"json" 은 유효한 JSON 만 보장하고 키/타입은 보장하지 않음. 스키마를 주면
+//  누락 키·오타 키·잘못된 타입이 원천 차단되어 파싱 후 coerce 실패가 줄어든다)
+const SEARCH_FILTER_SCHEMA = {
+  type: "object",
+  properties: {
+    intent: { type: "string", enum: ["search", "chat"] },
+    category: { type: ["string", "null"], enum: ["기획", "디자인", "퍼블리싱", "개발", null] },
+    grade: { type: ["string", "null"], enum: ["초급", "중급", "고급", null] },
+    minExperienceYears: { type: ["integer", "null"] },
+    maxExperienceYears: { type: ["integer", "null"] },
+    maxAge: { type: ["integer", "null"] },
+    minAge: { type: ["integer", "null"] },
+  },
+  required: ["intent", "category", "grade", "minExperienceYears", "maxExperienceYears", "maxAge", "minAge"],
+} as const;
+
 const SEARCH_FILTER_MESSAGES = (message: string) => [
   { role: "system", content: SEARCH_FILTER_SYSTEM_PROMPT },
   { role: "user", content: "리액트 3년차 프론트엔드 개발자 찾아줘" },
@@ -97,4 +114,24 @@ const CHAT_WITH_SUPABASE_MESSAGES = (query: string, candidatesJson: string) => [
   },
 ];
 
-export { SEARCH_FILTER_MESSAGES, CHAT_WITH_SUPABASE_MESSAGES };
+// 배치 평가 응답 스키마 — id 로 매칭되는 평가 객체 배열을 모델 레벨에서 강제.
+const CANDIDATE_EVAL_SCHEMA = {
+  type: "array",
+  items: {
+    type: "object",
+    properties: {
+      id: { type: "integer" },
+      major_experience: { type: "string" },
+      skills: { type: "array", items: { type: "string" } },
+      reason: { type: "string" },
+    },
+    required: ["id", "major_experience", "skills", "reason"],
+  },
+} as const;
+
+export {
+  SEARCH_FILTER_MESSAGES,
+  SEARCH_FILTER_SCHEMA,
+  CHAT_WITH_SUPABASE_MESSAGES,
+  CANDIDATE_EVAL_SCHEMA,
+};

@@ -234,7 +234,6 @@ Extract ALL projects above as a JSON array. Do not skip any entry. Empty fields 
 const LLM_OPTIONS = {
   temperature: 0.1,
   stop: ["<|endoftext|>", "<|im_start|>", "<|im_end|>", "Question:"],
-  format: "json",
   num_ctx: 16384,
   num_predict: 8192,
 };
@@ -242,12 +241,19 @@ const LLM_OPTIONS = {
 // stream:true 로 받아 조각을 이어붙인다.
 // (stream:false 는 생성이 끝나야 응답 헤더가 오는데, 긴 이력서는 생성에 5분 이상 걸려
 //  Node fetch 의 기본 헤더 타임아웃 300초를 넘기고 "fetch failed"가 난다)
+// format 은 options 가 아닌 요청 최상위 파라미터 (src/apis/ollama.ts askOllama 와 동일 처리).
 const callOllama = async (messages, useJsonFormat = true) => {
-  const options = useJsonFormat ? LLM_OPTIONS : { ...LLM_OPTIONS, format: undefined };
   const res = await fetch(`${OLLAMA_URL}/api/chat`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ model: TEXT_MODEL, messages, stream: true, options, keep_alive: -1 }),
+    body: JSON.stringify({
+      model: TEXT_MODEL,
+      messages,
+      stream: true,
+      format: useJsonFormat ? "json" : undefined,
+      options: LLM_OPTIONS,
+      keep_alive: -1,
+    }),
   });
   if (!res.ok) throw new Error(`Ollama ${res.status}: ${await res.text()}`);
 

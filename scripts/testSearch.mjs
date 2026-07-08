@@ -55,18 +55,17 @@ const getEmbedding = async (text) => {
   return result.embedding;
 };
 
-// app 의 askOllama 는 format 을 options 안에 넣는다(=Ollama 최상위 format 미적용).
-// src/apis/ollama.ts LLM_JSON_OPTIONS 와 동일하게 재현(저온도 + JSON 강제).
+// src/apis/ollama.ts askOllama 와 동일 동작 재현(저온도 + JSON 강제).
+// format 은 options(모델 파라미터)가 아닌 요청 최상위 파라미터로 보낸다.
 const LLM_JSON_OPTIONS = {
   temperature: 0.1,
   stop: ["<|endoftext|>", "<|im_start|>", "<|im_end|>", "Question:"],
-  format: "json",
 };
 const askOllama = async (messages) => {
   const res = await fetch(`${OLLAMA_URL}/api/chat`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ model: TEXT_MODEL, messages, stream: false, options: LLM_JSON_OPTIONS, keep_alive: -1 }),
+    body: JSON.stringify({ model: TEXT_MODEL, messages, stream: false, format: "json", options: LLM_JSON_OPTIONS, keep_alive: -1 }),
   });
   if (!res.ok) throw new Error(`Ollama Error: ${res.status} - ${await res.text()}`);
   const result = await res.json();
@@ -143,8 +142,8 @@ const coerceExperienceYears = (v) => {
   return Number.isFinite(n) && n >= 0 && n <= 60 ? Math.trunc(n) : null;
 };
 
-// 정규식 폴백 (LLM 호출/파싱 실패 시 결정적 키워드 필터 유지)
-const fallbackCategory = (message) => {
+// 정규식 1차 추출 (결정적 키워드 필터 — LLM 값보다 우선)
+const regexCategory = (message) => {
   const m = message.toLowerCase();
   if (/디자이너|디자인|designer/.test(m)) return "디자인";
   if (/퍼블리|publish/.test(m)) return "퍼블리싱";
@@ -152,19 +151,19 @@ const fallbackCategory = (message) => {
   if (/개발|프론트|백엔드|풀스택|developer|engineer|frontend|backend/.test(m)) return "개발";
   return null;
 };
-const fallbackGrade = (message) => {
+const regexGrade = (message) => {
   const m = message.toLowerCase();
   if (/초급|주니어|junior/.test(m)) return "초급";
   if (/중급|intermediate/.test(m)) return "중급";
   if (/고급|시니어|senior/.test(m)) return "고급";
   return null;
 };
-const fallbackAge = (message) => {
+const regexAge = (message) => {
   const max = message.match(/(\d{1,2})\s*(?:세|살)\s*(?:이하|미만|까지)/);
   const min = message.match(/(\d{1,2})\s*(?:세|살)\s*(?:이상|초과|넘)/);
   return { maxAge: max ? parseInt(max[1], 10) : null, minAge: min ? parseInt(min[1], 10) : null };
 };
-const fallbackExperience = (message) => {
+const regexExperience = (message) => {
   const min = message.match(/(\d{1,2})\s*년\s*(?:차)?\s*(?:이상|초과|넘)/);
   const max = message.match(/(\d{1,2})\s*년\s*(?:차)?\s*(?:이하|미만|까지)/);
   return {
@@ -172,11 +171,11 @@ const fallbackExperience = (message) => {
     maxExperienceYears: max ? parseInt(max[1], 10) : null,
   };
 };
-const fallbackFilters = (message) => {
-  const grade = fallbackGrade(message);
-  const category = fallbackCategory(message);
-  const { maxAge, minAge } = fallbackAge(message);
-  const { minExperienceYears, maxExperienceYears } = fallbackExperience(message);
+const extractFiltersByRegex = (message) => {
+  const grade = regexGrade(message);
+  const category = regexCategory(message);
+  const { maxAge, minAge } = regexAge(message);
+  const { minExperienceYears, maxExperienceYears } = regexExperience(message);
   const hasSignal = !!(
     grade || category || maxAge !== null || minAge !== null ||
     minExperienceYears !== null || maxExperienceYears !== null
@@ -184,8 +183,10 @@ const fallbackFilters = (message) => {
   return { intent: hasSignal ? "search" : "chat", category, grade, minExperienceYears, maxExperienceYears, maxAge, minAge };
 };
 
-// 라우터 LLM 한 번으로 의도+직무+등급+나이를 추출. 진단용으로 raw/폴백 여부도 반환.
+// 정규식 1차 추출 → LLM 이 빈 필드만 보완 (src/services/chatService.ts extractSearchFilters 동기화).
+// 진단용으로 raw/폴백 여부도 반환.
 const extractSearchFilters = async (message) => {
+  const regex = extractFiltersByRegex(message);
   try {
     const raw = await askOllama(SEARCH_FILTER_MESSAGES(message));
     const parsed = JSON.parse(raw);
@@ -193,17 +194,17 @@ const extractSearchFilters = async (message) => {
       raw,
       usedFallback: false,
       filters: {
-        intent: parsed.intent === "search" ? "search" : "chat",
-        category: coerceCategory(parsed.category),
-        grade: coerceGrade(parsed.grade),
-        minExperienceYears: coerceExperienceYears(parsed.minExperienceYears),
-        maxExperienceYears: coerceExperienceYears(parsed.maxExperienceYears),
-        maxAge: coerceAge(parsed.maxAge),
-        minAge: coerceAge(parsed.minAge),
+        intent: regex.intent === "search" || parsed.intent === "search" ? "search" : "chat",
+        category: regex.category ?? coerceCategory(parsed.category),
+        grade: regex.grade ?? coerceGrade(parsed.grade),
+        minExperienceYears: regex.minExperienceYears ?? coerceExperienceYears(parsed.minExperienceYears),
+        maxExperienceYears: regex.maxExperienceYears ?? coerceExperienceYears(parsed.maxExperienceYears),
+        maxAge: regex.maxAge ?? coerceAge(parsed.maxAge),
+        minAge: regex.minAge ?? coerceAge(parsed.minAge),
       },
     };
   } catch (e) {
-    return { raw: `(LLM 추출 실패: ${e.message})`, usedFallback: true, filters: fallbackFilters(message) };
+    return { raw: `(LLM 추출 실패: ${e.message})`, usedFallback: true, filters: regex };
   }
 };
 const GRADE_THRESHOLDS = { JUNIOR_MAX_MONTHS: 60, MID_MAX_MONTHS: 120, SENIOR_MIN_MONTHS: 120 };

@@ -379,10 +379,13 @@ const EMBEDDING_TIMEOUT_MS = 30_000;
 const LLM_OPTIONS = {
   temperature: 0.1,
   stop: ["<|endoftext|>", "<|im_start|>", "<|im_end|>", "Question:"],
-  format: "json",
   num_ctx: 16384,
   num_predict: 8192,
 };
+
+// format 은 options(모델 파라미터)가 아닌 요청 최상위 파라미터 — options 안에 넣으면
+// Ollama 가 무시해 JSON 강제가 걸리지 않는다 (src/apis/ollama.ts askOllama 와 동일 처리).
+const LLM_FORMAT = "json";
 
 const fetchWithTimeout = async (url, init, timeoutMs, label) => {
   try {
@@ -404,7 +407,7 @@ const callOllama = async (messages) => {
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ model: TEXT_MODEL, messages, stream: true, options: LLM_OPTIONS, keep_alive: -1 }),
+      body: JSON.stringify({ model: TEXT_MODEL, messages, stream: true, format: LLM_FORMAT, options: LLM_OPTIONS, keep_alive: -1 }),
     },
     CHAT_TIMEOUT_MS,
     `Ollama 채팅(${TEXT_MODEL})`,
