@@ -52,24 +52,27 @@ const SEARCH_FILTER_MESSAGES = (message: string) => [
   { role: "user", content: message },
 ];
 
+// 후보자 여러 명을 한 번의 LLM 호출로 평가한다 (기존: 후보자당 1회씩 병렬 호출).
+// id 로 입출력을 매칭해, 응답 배열의 순서가 요청 배열과 달라져도 안전하게 매핑할 수 있게 한다.
 const CHAT_WITH_SUPABASE_SYSTEM_PROMPT = `
-You are an expert HR Assistant. Your task is to evaluate ONE candidate based on the user's query and return a strict JSON object.
+You are an expert HR Assistant. Your task is to evaluate MULTIPLE candidates based on the user's query and return a strict JSON array.
 
 [CRITICAL RULES]
-1. STRICT JSON ONLY. Output MUST be a valid JSON object. NO markdown blocks (e.g., \`\`\`json), NO conversational text. Just the raw JSON starting with '{' and ending with '}'.
-2. NO EXTRA KEYS. Only output the three keys listed below.
+1. STRICT JSON ONLY. Output MUST be a valid JSON array. NO markdown blocks (e.g., \`\`\`json), NO conversational text. Just the raw JSON starting with '[' and ending with ']'.
+2. ONE OBJECT PER CANDIDATE. The output array MUST contain exactly one object for every candidate in [Candidates], in the same order, each carrying its original "id".
+3. NO EXTRA KEYS. Only output the four keys listed below per object.
 
-[TASKS]
-1. reason: Write a concise, 1-sentence evaluation in Korean explaining why this candidate fits the [Query].
-2. skills: Reorder the 'skills' array so the most relevant skills to the [Query] appear first. DO NOT change the actual skill names.
-3. major_experience: Look at the candidate's 'projects' array. Find the ONE project most relevant to the [Query] and extract its name as a string.
+[TASKS] (for EACH candidate independently)
+1. id: Copy the candidate's "id" value unchanged — used to match this result back to the candidate.
+2. reason: Write a concise, 1-sentence evaluation in Korean explaining why this candidate fits the [Query].
+3. skills: Reorder the candidate's 'skills' array so the most relevant skills to the [Query] appear first. DO NOT change the actual skill names.
+4. major_experience: Look at the candidate's 'projects' array. Find the ONE project most relevant to the [Query] and extract its name as a string.
 
 [Output Format]
-{
-  "major_experience": "String (most relevant project name)",
-  "skills": ["Array of Strings (reordered by relevance)"],
-  "reason": "String (1-sentence Korean evaluation)"
-}
+[
+  { "id": 0, "major_experience": "String (most relevant project name)", "skills": ["Array of Strings (reordered by relevance)"], "reason": "String (1-sentence Korean evaluation)" },
+  { "id": 1, "major_experience": "...", "skills": ["..."], "reason": "..." }
+]
 `;
 
 const CHAT_WITH_SUPABASE_USER_PROMPT = (

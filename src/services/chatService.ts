@@ -174,49 +174,65 @@ const extractSearchFilters = async (message: string): Promise<SearchFilters> => 
   }
 };
 
-// 후보자 1명을 LLM 으로 평가해 카드 + 사유(reason) 를 붙여 반환.
-// 파싱/통신 오류가 나도 throw 하지 않고 안전한 fallback 카드를 돌려준다.
-const evaluateCandidate = async (candidate: MinimalCandidate, message: string) => {
-  const { work_experiences, projects, ...cardData } = candidate;
+// 안전한 fallback 카드 (LLM 평가 실패 시 사용). evaluateCandidate 였을 때와 동일한 문구를 유지한다.
+const fallbackEvaluatedCard = (candidate: MinimalCandidate) => {
+  const { work_experiences: _w, projects: _p, ...cardData } = candidate;
+  return {
+    ...cardData,
+    reason: "AI 분석 중 오류가 발생하여 사유를 생성하지 못했습니다.",
+    details: { ...cardData.details, major_experience: "확인 불가" },
+  };
+};
+
+// 후보자 여러 명을 LLM 1회 호출로 한꺼번에 평가해 카드 + 사유(reason)를 붙여 반환.
+// (예전에는 후보자당 1회씩 최대 4회 병렬 호출했으나, 배치 1회 호출로 통합해 LLM 왕복 수를 줄였다.)
+// id 로 요청/응답을 매칭하므로 응답 순서가 어긋나거나 일부 후보가 누락돼도 안전하게 매핑되고,
+// 응답 전체 파싱이 실패하면 모든 후보에 안전한 fallback 카드를 반환한다(throw 하지 않음).
+const evaluateCandidates = async (candidates: MinimalCandidate[], message: string) => {
+  if (candidates.length === 0) return [];
 
   try {
-    const candidateForLLM = {
+    const candidatesForLLM = candidates.map((candidate, id) => ({
+      id,
       introduction: candidate.introduction,
       skills: candidate.details.skills,
-      work_experiences,
-      projects,
-    };
+      work_experiences: candidate.work_experiences,
+      projects: candidate.projects,
+    }));
 
     const resultText = await askOllama(
       import.meta.env.VITE_LLAMA_TEXT_MODEL,
-      CHAT_WITH_SUPABASE_MESSAGES(message, JSON.stringify(candidateForLLM)),
+      CHAT_WITH_SUPABASE_MESSAGES(message, JSON.stringify(candidatesForLLM)),
       true,
-      { num_ctx: 8192, ...LLM_JSON_OPTIONS },
+      { num_ctx: 16384, ...LLM_JSON_OPTIONS },
     );
 
     const cleanedText = resultText.replace(/^```(?:json)?\s*/i, "").replace(/\s*```\s*$/, "").trim();
-    let parsed = JSON.parse(cleanedText);
-    parsed = Array.isArray(parsed) ? parsed[0] : parsed;
+    const parsed = JSON.parse(cleanedText);
+    const resultsById = new Map<number, any>(
+      (Array.isArray(parsed) ? parsed : [parsed]).map((r) => [r?.id, r]),
+    );
 
-    return {
-      ...cardData,
-      details: {
-        ...cardData.details,
-        major_experience: parsed.major_experience || "관련 경험 없음",
-        skills: parsed.skills || cardData.details.skills,
-      },
-      reason: parsed.reason || "조건에 부합하는 인재입니다.",
-    };
+    return candidates.map((candidate, id) => {
+      const { work_experiences: _w, projects: _p, ...cardData } = candidate;
+      const result = resultsById.get(id);
+      if (!result) {
+        console.warn(`[${candidate.name}] 배치 평가 응답에 결과가 없어 fallback 사용`);
+        return fallbackEvaluatedCard(candidate);
+      }
+      return {
+        ...cardData,
+        details: {
+          ...cardData.details,
+          major_experience: result.major_experience || "관련 경험 없음",
+          skills: result.skills || cardData.details.skills,
+        },
+        reason: result.reason || "조건에 부합하는 인재입니다.",
+      };
+    });
   } catch (err) {
-    console.error(`[${candidate.name}] 평가 중 AI 파싱 오류 발생 :`, err);
-    return {
-      ...cardData,
-      reason: "AI 분석 중 오류가 발생하여 사유를 생성하지 못했습니다.",
-      details: {
-        ...cardData.details,
-        major_experience: "확인 불가",
-      },
-    };
+    console.error("[검색] 후보자 배치 평가 중 AI 파싱 오류 발생:", err);
+    return candidates.map(fallbackEvaluatedCard);
   }
 };
 
@@ -385,10 +401,8 @@ const postChatWithSupabase = async (
       };
     }
 
-    // 후보자별 LLM 평가를 병렬 처리 (결과 순서는 입력 순서와 동일하게 유지됨)
-    const evaluatedCandidates = await Promise.all(
-      topCandidates.map((candidate) => evaluateCandidate(candidate, message)),
-    );
+    // 후보자 전체를 LLM 1회 호출로 배치 평가 (기존: 후보자당 1회씩 최대 4회 병렬 호출)
+    const evaluatedCandidates = await evaluateCandidates(topCandidates, message);
     console.log("[검색] 10. LLM 평가 완료:", evaluatedCandidates.length, "명 → 카드 반환");
 
     return { text: JSON.stringify(evaluatedCandidates) };
